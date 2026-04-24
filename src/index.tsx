@@ -280,7 +280,7 @@ function App() {
       <Box borderStyle="round" borderColor="blue" paddingX={1}>
         <Text>
           <Text color="blue" bold>
-            nano-code
+            bonfire
           </Text>
           {'  '}
           <Text color="gray">
@@ -378,9 +378,9 @@ function App() {
 if (!process.stdin.isTTY) {
   const hint =
     process.platform === 'win32'
-      ? 'On Git Bash / MSYS, run `winpty nano-code`, or use Windows Terminal or PowerShell directly.'
+      ? 'On Git Bash / MSYS, run `winpty bonfire`, or use Windows Terminal or PowerShell directly.'
       : 'Run from a real terminal (not piped stdin).';
-  console.error(`nano-code requires an interactive TTY.\n${hint}`);
+  console.error(`bonfire requires an interactive TTY.\n${hint}`);
   process.exit(1);
 }
 

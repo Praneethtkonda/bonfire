@@ -91,15 +91,15 @@ While a diff is pending, `y` / `enter` approves and `n` / `esc` rejects.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NANO_PROVIDER` | `ollama` | Active provider — `ollama` or `llama.cpp` |
-| `NANO_MODEL` | provider-specific | Model id (Ollama tag, or cosmetic label for llama.cpp) |
+| `BONFIRE_PROVIDER` | `ollama` | Active provider — `ollama` or `llama.cpp` |
+| `BONFIRE_MODEL` | provider-specific | Model id (Ollama tag, or cosmetic label for llama.cpp) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama host URL |
 | `LLAMACPP_BASE_URL` | `http://127.0.0.1:8080/v1` | `llama-server` OpenAI-compatible endpoint |
 | `LLAMACPP_API_KEY` | — | Optional bearer token if `llama-server` is behind an auth proxy |
-| `NANO_DEBUG` | — | `1` to log every HTTP request / status code |
-| `NANO_DISABLE_BUILTINS` | — | `1` to run with only MCP tools (no built-ins) |
+| `BONFIRE_DEBUG` | — | `1` to log every HTTP request / status code |
+| `BONFIRE_DISABLE_BUILTINS` | — | `1` to run with only MCP tools (no built-ins) |
 
-Provider / model can also be pinned in `nano-code.config.json` — see [`docs/providers.md`](./docs/providers.md).
+Provider / model can also be pinned in `bonfire.config.json` — see [`docs/providers.md`](./docs/providers.md).
 
 ## Built-in tools
 
@@ -177,7 +177,7 @@ src/
   agent.ts          # streamText loop, event forwarding, system prompt
   tools.ts          # built-in tools + allowlist + approval gate
   mcp.ts            # MCP server loading
-  config.ts         # nano-code.config.json loader (shared)
+  config.ts         # bonfire.config.json loader (shared)
   providers/
     index.ts        # resolveProvider() — picks Ollama or llama.cpp
     types.ts        # ResolvedProvider shape

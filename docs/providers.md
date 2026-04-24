@@ -1,6 +1,6 @@
 # Providers & setup
 
-nano-code runs against a local model. Two providers are supported:
+bonfire runs against a local model. Two providers are supported:
 
 - **Ollama** — easiest on macOS / Linux. One-liner install, tool calling works out of the box.
 - **llama.cpp** (`llama-server`) — best for Windows, or when you want direct control over GGUF quants, offload, and the chat template.
@@ -24,10 +24,10 @@ Start the daemon (one of):
 
 Verify it's up: `curl http://localhost:11434/api/tags`
 
-Run nano-code — Ollama is the default provider, so no env vars needed:
+Run bonfire — Ollama is the default provider, so no env vars needed:
 
 ```bash
-cd path/to/nano-code
+cd path/to/bonfire
 npm install
 npm start
 ```
@@ -37,10 +37,10 @@ TUI header should read `ollama · qwen2.5-coder:latest`.
 To pick a different model:
 
 ```bash
-NANO_MODEL=qwen3-coder:30b npm start
+BONFIRE_MODEL=qwen3-coder:30b npm start
 ```
 
-Or pin it in `nano-code.config.json`:
+Or pin it in `bonfire.config.json`:
 
 ```json
 {
@@ -60,7 +60,7 @@ Install from https://ollama.com/download (MSI installer). Ollama runs as a backg
 
 ```powershell
 ollama pull qwen2.5-coder:latest
-cd path\to\nano-code
+cd path\to\bonfire
 npm install
 npm start
 ```
@@ -68,7 +68,7 @@ npm start
 To switch model:
 
 ```powershell
-$env:NANO_MODEL = "qwen3-coder:30b"
+$env:BONFIRE_MODEL = "qwen3-coder:30b"
 npm start
 ```
 
@@ -78,7 +78,7 @@ npm start
 OLLAMA_BASE_URL=http://192.168.1.50:11434/api npm start
 ```
 
-Note the `/api` suffix — nano-code talks to Ollama's native API, not its OpenAI-compat shim.
+Note the `/api` suffix — bonfire talks to Ollama's native API, not its OpenAI-compat shim.
 
 ### Models that tool-call reliably on Ollama
 
@@ -88,7 +88,7 @@ Note the `/api` suffix — nano-code talks to Ollama's native API, not its OpenA
 
 ## 2. llama.cpp (`llama-server`)
 
-nano-code treats llama.cpp as an OpenAI-compatible endpoint (the same pattern opencode uses): it posts standard `/v1/chat/completions` requests with `tools` / `tool_calls` to `llama-server`. You point nano-code at the server URL; llama-server loads the GGUF you hand it with `-m`.
+bonfire treats llama.cpp as an OpenAI-compatible endpoint (the same pattern opencode uses): it posts standard `/v1/chat/completions` requests with `tools` / `tool_calls` to `llama-server`. You point bonfire at the server URL; llama-server loads the GGUF you hand it with `-m`.
 
 ### Windows
 
@@ -125,26 +125,48 @@ Flag reference:
 | `--jinja` | **Required for tool calling.** Enables the model's built-in chat template so llama-server parses `tool_calls` instead of returning them as plain text. |
 | `-ngl N` | Number of transformer layers to offload to GPU. Start low (20–28) with 6 GB VRAM, bump until it fits. |
 | `-c N` | Context size. Bigger = more VRAM/RAM used by the KV cache. |
-| `-m <path>` | GGUF model file. |
+| `--model` / `-m` | Path to GGUF model file. |
+| `--alias` | Cosmetic alias for the model (what bonfire displays). |
 | `--host` / `--port` | Bind address. Keep `127.0.0.1` for local-only. |
+| `--temp N` | Temperature for sampling (0–2, default 0.8). Lower = more deterministic. |
+| `--top-p N` | Nucleus sampling threshold (0–1). Higher = more diverse. |
+| `--top-k N` | Keep only top-K most likely next tokens. |
+| `--min-p N` | Minimum probability threshold. |
+| `--presence-penalty N` | Penalty for repeating tokens. |
+
+**Example configuration (Qwen3.6-35B, MoE, tuned for code):**
+
+```powershell
+.\llama-server.exe `
+  --model C:\models\Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf `
+  --alias "unsloth/Qwen3.6-35B-A3B" `
+  -c 32768 `
+  --jinja `
+  --temp 0.6 `
+  --top-p 0.95 `
+  --top-k 20 `
+  --min-p 0.00 `
+  --presence-penalty 0.0 `
+  --port 8080
+```
 
 Verify: open `http://127.0.0.1:8080` in a browser — you'll see llama.cpp's web UI.
 
-#### c. Run nano-code against it
+#### c. Run bonfire against it
 
 In a **second** PowerShell window:
 
 ```powershell
-cd path\to\nano-code
+cd path\to\bonfire
 npm install
 
-$env:NANO_PROVIDER     = "llama.cpp"
-$env:NANO_MODEL        = "qwen3-coder"              # cosmetic — llama-server ignores the id
+$env:BONFIRE_PROVIDER     = "llama.cpp"
+$env:BONFIRE_MODEL        = "qwen3-coder"              # cosmetic — llama-server ignores the id
 $env:LLAMACPP_BASE_URL = "http://127.0.0.1:8080/v1" # optional; this is the default
 npm start
 ```
 
-Or skip env vars by using `nano-code.config.json`:
+Or skip env vars by using `bonfire.config.json`:
 
 ```json
 {
@@ -160,7 +182,7 @@ Or skip env vars by using `nano-code.config.json`:
 
 TUI header should read `llama.cpp · qwen3-coder`.
 
-Persist the provider choice across shells: `setx NANO_PROVIDER llama.cpp` (takes effect in *new* shells).
+Persist the provider choice across shells: `setx BONFIRE_PROVIDER llama.cpp` (takes effect in *new* shells).
 
 ### macOS
 
@@ -197,32 +219,32 @@ llama-server \
 
 On Apple Silicon, `-ngl 99` offloads everything to the Metal GPU (unified memory makes this essentially free). Drop it if you're on an Intel Mac without a dGPU.
 
-#### c. Run nano-code against it
+#### c. Run bonfire against it
 
 ```bash
-cd path/to/nano-code
+cd path/to/bonfire
 npm install
 
-export NANO_PROVIDER=llama.cpp
-export NANO_MODEL=qwen3-coder
+export BONFIRE_PROVIDER=llama.cpp
+export BONFIRE_MODEL=qwen3-coder
 npm start
 ```
 
-Or use `nano-code.config.json` as shown above.
+Or use `bonfire.config.json` as shown above.
 
 ---
 
 ## Provider selection precedence
 
-When nano-code starts it picks the provider in this order (first match wins):
+When bonfire starts it picks the provider in this order (first match wins):
 
-1. `NANO_PROVIDER` environment variable (`ollama` | `llama.cpp`)
-2. `provider.active` in `nano-code.config.json`
+1. `BONFIRE_PROVIDER` environment variable (`ollama` | `llama.cpp`)
+2. `provider.active` in `bonfire.config.json`
 3. Default: `ollama`
 
 Model id follows the same idea:
 
-1. `NANO_MODEL` env var
+1. `BONFIRE_MODEL` env var
 2. `provider.<id>.model` in config
 3. Provider-specific default (`qwen2.5-coder:latest` for Ollama, `local-model` for llama.cpp)
 
@@ -248,10 +270,10 @@ The MoE model (`30B-A3B` = 30B total, 3B active per token) is the sweet spot for
 If the model *describes* editing a file but no `● write_file(...)` line appears in the TUI, run with:
 
 ```bash
-NANO_DEBUG=1 npm start          # macOS / Linux
+BONFIRE_DEBUG=1 npm start          # macOS / Linux
 ```
 ```powershell
-$env:NANO_DEBUG="1"; npm start  # Windows
+$env:BONFIRE_DEBUG="1"; npm start  # Windows
 ```
 
 Common causes:
@@ -260,8 +282,8 @@ Common causes:
 | --- | --- |
 | Model outputs XML-ish tool syntax as plain text | llama-server missing `--jinja`, or GGUF lacks a chat template — pass `--chat-template-file <path>` |
 | `404` from llama-server | Wrong `baseURL` — it must end in `/v1` |
-| `model ... not found` from Ollama | `NANO_MODEL` tag not pulled — run `ollama list` to check |
-| Tool calls arrive but never execute | `NANO_DISABLE_BUILTINS=1` is set and no MCP server provides that tool |
+| `model ... not found` from Ollama | `BONFIRE_MODEL` tag not pulled — run `ollama list` to check |
+| Tool calls arrive but never execute | `BONFIRE_DISABLE_BUILTINS=1` is set and no MCP server provides that tool |
 | Ink raw-mode crash on Windows | Running under Git Bash / MSYS — use Windows Terminal or wrap with `winpty` |
 
 ---
@@ -272,3 +294,7 @@ Common causes:
 - [llama.cpp server docs](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md) — full flag list for `llama-server`
 - [Ollama model library](https://ollama.com/library)
 - [Qwen3-Coder on Hugging Face](https://huggingface.co/Qwen) — GGUF quants
+
+## License
+
+MIT

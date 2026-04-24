@@ -15,7 +15,7 @@ export async function createLlamaCppProvider(input: {
 }): Promise<ResolvedProvider> {
   const cfg = (await loadConfig()).provider?.['llama.cpp'] ?? {};
   const baseURL = input.env.LLAMACPP_BASE_URL ?? cfg.baseURL ?? DEFAULT_BASE_URL;
-  const modelId = input.env.NANO_MODEL ?? cfg.model ?? DEFAULT_MODEL;
+  const modelId = input.env.BONFIRE_MODEL ?? cfg.model ?? DEFAULT_MODEL;
   const apiKey = input.env.LLAMACPP_API_KEY ?? cfg.apiKey;
 
   const sdk = createOpenAICompatible({

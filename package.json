@@ -1,9 +1,9 @@
 {
-  "name": "nano-code",
+  "name": "bonfire",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "nano-code": "./src/index.tsx"
+    "bonfire": "./src/index.tsx"
   },
   "scripts": {
     "start": "tsx src/index.tsx",

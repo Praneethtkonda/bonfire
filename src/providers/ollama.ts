@@ -11,7 +11,7 @@ export async function createOllamaProvider(input: {
 }): Promise<ResolvedProvider> {
   const cfg = (await loadConfig()).provider?.ollama ?? {};
   const baseURL = input.env.OLLAMA_BASE_URL ?? cfg.baseURL ?? DEFAULT_BASE_URL;
-  const modelId = input.env.NANO_MODEL ?? cfg.model ?? DEFAULT_MODEL;
+  const modelId = input.env.BONFIRE_MODEL ?? cfg.model ?? DEFAULT_MODEL;
 
   const sdk = createOllama({ baseURL, fetch: input.fetchImpl });
 

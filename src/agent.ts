@@ -15,7 +15,7 @@ export async function shutdownMcp(): Promise<void> {
   if (mcpState) await mcpState.close();
 }
 
-const DEBUG = process.env.NANO_DEBUG === '1';
+const DEBUG = process.env.BONFIRE_DEBUG === '1';
 
 const debugFetch: typeof fetch = async (input, init) => {
   if (DEBUG && init?.body) {
@@ -55,7 +55,7 @@ const PLATFORM_HINT = (() => {
   return `You are running on ${process.platform}. The \`shell\` tool invokes /bin/sh — use standard POSIX commands.`;
 })();
 
-const SYSTEM_PROMPT_BASE = `You are nano-code, a terminal coding assistant.
+const SYSTEM_PROMPT_BASE = `You are bonfire, a terminal coding assistant.
 
 You have tools to read, write, edit files, list directories, and run shell commands in the user's working directory.
 
@@ -115,7 +115,7 @@ export async function* runAgent(
 
   try {
     const provider = await getProvider();
-    const disableBuiltins = process.env.NANO_DISABLE_BUILTINS === '1';
+    const disableBuiltins = process.env.BONFIRE_DISABLE_BUILTINS === '1';
     const mergedTools = {
       ...(disableBuiltins ? {} : builtinTools),
       ...(mcpState?.tools ?? {}),

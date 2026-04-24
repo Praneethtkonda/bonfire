@@ -22,7 +22,7 @@ export async function resolveProvider(input: {
   const fetchImpl = input.fetchImpl ?? fetch;
   const cfg = await loadConfig();
 
-  const envProvider = env.NANO_PROVIDER;
+  const envProvider = env.BONFIRE_PROVIDER;
   const configProvider = cfg.provider?.active;
   const selected: ProviderId = isProviderId(envProvider)
     ? envProvider

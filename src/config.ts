@@ -27,21 +27,21 @@ export interface ProviderConfig {
   'llama.cpp'?: LlamaCppProviderConfig;
 }
 
-export interface NanoConfig {
+export interface BonfireConfig {
   provider?: ProviderConfig;
   mcpServers?: Record<string, McpServerConfig>;
 }
 
-const CONFIG_FILENAME = 'nano-code.config.json';
+const CONFIG_FILENAME = 'bonfire.config.json';
 
-let cached: NanoConfig | null = null;
+let cached: BonfireConfig | null = null;
 
-export async function loadConfig(): Promise<NanoConfig> {
+export async function loadConfig(): Promise<BonfireConfig> {
   if (cached) return cached;
   const path = resolve(process.cwd(), CONFIG_FILENAME);
   try {
     const raw = await readFile(path, 'utf-8');
-    cached = JSON.parse(raw) as NanoConfig;
+    cached = JSON.parse(raw) as BonfireConfig;
   } catch {
     cached = {};
   }
