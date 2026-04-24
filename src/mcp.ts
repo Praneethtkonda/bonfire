@@ -1,31 +1,10 @@
 import { createMCPClient } from '@ai-sdk/mcp';
 import { Experimental_StdioMCPTransport as StdioTransport } from '@ai-sdk/mcp/mcp-stdio';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-
-export interface McpServerConfig {
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-}
-
-export interface McpConfig {
-  mcpServers?: Record<string, McpServerConfig>;
-}
+import { loadConfig } from './config.js';
 
 export interface LoadedMcp {
   tools: Record<string, any>;
   close: () => Promise<void>;
-}
-
-async function loadConfig(): Promise<McpConfig> {
-  const path = resolve(process.cwd(), 'nano-code.config.json');
-  try {
-    const raw = await readFile(path, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
 }
 
 export async function loadMcpServers(): Promise<LoadedMcp> {

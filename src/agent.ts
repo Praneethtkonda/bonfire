@@ -1,9 +1,10 @@
 import { streamText, stepCountIs, type ModelMessage } from 'ai';
-import { createOllama } from 'ollama-ai-provider-v2';
-import { tools as builtinTools } from './tools.js';
+import { tools as builtinTools, getAllowedDirs } from './tools.js';
 import { loadMcpServers, type LoadedMcp } from './mcp.js';
+import { resolveProvider, type ResolvedProvider } from './providers/index.js';
 
 let mcpState: LoadedMcp | null = null;
+let providerState: ResolvedProvider | null = null;
 
 export async function initMcp(): Promise<number> {
   mcpState = await loadMcpServers();
@@ -13,9 +14,6 @@ export async function initMcp(): Promise<number> {
 export async function shutdownMcp(): Promise<void> {
   if (mcpState) await mcpState.close();
 }
-
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434/api';
-const MODEL = process.env.NANO_MODEL ?? 'qwen2.5-coder:latest';
 
 const DEBUG = process.env.NANO_DEBUG === '1';
 
@@ -35,11 +33,33 @@ const debugFetch: typeof fetch = async (input, init) => {
   return res;
 };
 
-const ollama = createOllama({ baseURL: OLLAMA_URL, fetch: debugFetch });
+async function getProvider(): Promise<ResolvedProvider> {
+  if (!providerState) {
+    providerState = await resolveProvider({ fetchImpl: debugFetch });
+  }
+  return providerState;
+}
 
-const SYSTEM_PROMPT = `You are nano-code, a terminal coding assistant.
+export async function describeProvider(): Promise<string> {
+  const p = await getProvider();
+  return p.label;
+}
+
+const PLATFORM_HINT = (() => {
+  if (process.platform === 'win32') {
+    return 'You are running on Windows. The `shell` tool invokes cmd.exe — use Windows-native commands (dir, type, findstr, copy, del, Remove-Item via powershell -Command). Do not use Unix utilities like ls/grep/cat/rm.';
+  }
+  if (process.platform === 'darwin') {
+    return 'You are running on macOS. The `shell` tool invokes /bin/sh — use standard POSIX commands.';
+  }
+  return `You are running on ${process.platform}. The \`shell\` tool invokes /bin/sh — use standard POSIX commands.`;
+})();
+
+const SYSTEM_PROMPT_BASE = `You are nano-code, a terminal coding assistant.
 
 You have tools to read, write, edit files, list directories, and run shell commands in the user's working directory.
+
+${PLATFORM_HINT}
 
 Rules:
 - When the user asks for a change, use tools to actually do it. Do not just describe.
@@ -48,13 +68,40 @@ Rules:
 - Keep replies short. The user can see tool output.
 - After completing the task, confirm what you did in one sentence.`;
 
+function buildSystemPrompt(): string {
+  const dirs = getAllowedDirs();
+  if (dirs.length <= 1) return SYSTEM_PROMPT_BASE;
+  const extras = dirs
+    .slice(1)
+    .map((d) => `- ${d}`)
+    .join('\n');
+  return `${SYSTEM_PROMPT_BASE}\n\nAdditional allowed directories (pass absolute paths to tools):\n${extras}`;
+}
+
+export interface TokenUsage {
+  input: number;
+  output: number;
+  total: number;
+}
+
 export interface AgentEvent {
-  type: 'text' | 'tool-call' | 'tool-result' | 'done' | 'error';
+  type:
+    | 'text'
+    | 'tool-input-start'
+    | 'tool-input-delta'
+    | 'tool-call'
+    | 'tool-result'
+    | 'usage'
+    | 'done'
+    | 'error';
   text?: string;
   toolName?: string;
+  toolCallId?: string;
+  delta?: string;
   args?: unknown;
   result?: unknown;
   error?: string;
+  usage?: TokenUsage;
 }
 
 export async function* runAgent(
@@ -67,15 +114,15 @@ export async function* runAgent(
   ];
 
   try {
+    const provider = await getProvider();
     const disableBuiltins = process.env.NANO_DISABLE_BUILTINS === '1';
     const mergedTools = {
       ...(disableBuiltins ? {} : builtinTools),
       ...(mcpState?.tools ?? {}),
     };
-    console.log(mergedTools);
     const result = streamText({
-      model: ollama(MODEL),
-      system: SYSTEM_PROMPT,
+      model: provider.model,
+      system: buildSystemPrompt(),
       messages,
       tools: mergedTools,
       stopWhen: stepCountIs(10),
@@ -83,14 +130,53 @@ export async function* runAgent(
     });
 
     for await (const part of result.fullStream) {
-      if (part.type === 'text-delta') {
-        yield { type: 'text', text: part.text };
-      } else if (part.type === 'tool-call') {
-        yield { type: 'tool-call', toolName: part.toolName, args: (part as any).input };
-      } else if (part.type === 'tool-result') {
-        yield { type: 'tool-result', toolName: part.toolName, result: (part as any).output };
-      } else if (part.type === 'error') {
-        yield { type: 'error', error: String(part.error) };
+      const t = (part as any).type as string;
+      if (t === 'text-delta') {
+        yield { type: 'text', text: (part as any).text };
+      } else if (t === 'tool-input-start' || t === 'tool-call-streaming-start') {
+        yield {
+          type: 'tool-input-start',
+          toolName: (part as any).toolName,
+          toolCallId: (part as any).id ?? (part as any).toolCallId,
+        };
+      } else if (t === 'tool-input-delta' || t === 'tool-call-delta') {
+        yield {
+          type: 'tool-input-delta',
+          toolCallId: (part as any).id ?? (part as any).toolCallId,
+          delta:
+            (part as any).delta ??
+            (part as any).argsTextDelta ??
+            '',
+        };
+      } else if (t === 'tool-call') {
+        yield {
+          type: 'tool-call',
+          toolName: (part as any).toolName,
+          toolCallId: (part as any).toolCallId,
+          args: (part as any).input ?? (part as any).args,
+        };
+      } else if (t === 'tool-result') {
+        yield {
+          type: 'tool-result',
+          toolName: (part as any).toolName,
+          toolCallId: (part as any).toolCallId,
+          result: (part as any).output ?? (part as any).result,
+        };
+      } else if (t === 'finish' || t === 'finish-step') {
+        const raw =
+          (part as any).totalUsage ??
+          (part as any).usage ??
+          null;
+        if (raw) {
+          const input = raw.inputTokens ?? raw.promptTokens ?? 0;
+          const output = raw.outputTokens ?? raw.completionTokens ?? 0;
+          const total = raw.totalTokens ?? input + output;
+          if (t === 'finish') {
+            yield { type: 'usage', usage: { input, output, total } };
+          }
+        }
+      } else if (t === 'error') {
+        yield { type: 'error', error: String((part as any).error) };
       }
     }
 
