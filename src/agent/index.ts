@@ -50,7 +50,7 @@ export async function* runAgent(
       system: await buildSystemPrompt(),
       messages,
       tools: mergedTools,
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(100),
       temperature: 0.2,
     });
 
