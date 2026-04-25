@@ -173,16 +173,33 @@ Issues and small PRs welcome. The codebase is intentionally minimal; favour clar
 
 ```
 src/
-  index.tsx         # Ink TUI — rendering, input, approvals, panels
-  agent.ts          # streamText loop, event forwarding, system prompt
-  tools.ts          # built-in tools + allowlist + approval gate
-  mcp.ts            # MCP server loading
   config.ts         # bonfire.config.json loader (shared)
+  agent/
+    index.ts        # runAgent, initMcp, listTools
+    provider.ts     # lazy provider, debug fetch with header redaction
+    stream.ts       # typed normalizer for AI SDK fullStream events
+    system-prompt.ts# 3-layer prompt: built-in + ~/.bonfire + .bonfire/system.md
+  tools/
+    safe-path.ts    # realpath-aware allowlist (closes symlink escapes)
+    approval.ts     # tri-state yes/no/always handler
+    shell-policy.ts # hardcoded deny-list + per-config allow/deny patterns
+    file-tools.ts, shell-tool.ts, navigate-tool.ts
+  mcp/
+    index.ts, stdio.ts, http.ts, windows.ts
+  session/
+    index.ts, storage.ts, meta.ts
+  codemap/
+    walk.ts, summarize.ts, store.ts, index.ts, ignore.ts, types.ts
   providers/
-    index.ts        # resolveProvider() — picks Ollama or llama.cpp
-    types.ts        # ResolvedProvider shape
-    ollama.ts       # Ollama provider (ollama-ai-provider-v2)
-    llamacpp.ts     # llama.cpp provider (@ai-sdk/openai-compatible)
+    index.ts, ollama.ts, llamacpp.ts, types.ts
+  cli/
+    bin.tsx         # entry: TTY check, MCP boot, render <App/>, signals
+    App.tsx         # layout-only composition
+    components/     # Header, Transcript, ToolLine, ResultLine, DiffPreview,
+                    # ModifiedFilesPanel, UsageBar, ApprovalPrompt, PromptBar,
+                    # MultilineInput, CommandSuggestions, ToolsPane
+    hooks/          # useAgentStream, useApproval, useProvider, useThinkingPhrase
+    commands/       # slash-command registry: codemap, sessions, dirs, help, exit
 ```
 
 ## License

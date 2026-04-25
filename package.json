@@ -1,13 +1,50 @@
 {
   "name": "bonfire",
   "version": "0.1.0",
+  "description": "A local-first terminal coding assistant. Streams tokens, previews diffs, and runs against any local model via Ollama or llama.cpp.",
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "cli",
+    "terminal",
+    "tui",
+    "ink",
+    "ollama",
+    "llama.cpp",
+    "mcp",
+    "local-first"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/bonfire.git"
+  },
+  "homepage": "https://github.com/your-org/bonfire#readme",
+  "bugs": {
+    "url": "https://github.com/your-org/bonfire/issues"
+  },
   "type": "module",
   "bin": {
-    "bonfire": "./src/index.tsx"
+    "bonfire": "./dist/cli/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "bonfire.config.example.json"
+  ],
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
-    "start": "tsx src/index.tsx",
-    "dev": "tsx watch src/index.tsx"
+    "build": "tsup",
+    "dev": "tsx watch src/cli/bin.tsx",
+    "start": "tsx src/cli/bin.tsx",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@ai-sdk/mcp": "^1.0.36",
@@ -17,7 +54,6 @@
     "execa": "^9.5.2",
     "ink": "^7.0.1",
     "ink-spinner": "^5.0.0",
-    "ink-text-input": "^6.0.0",
     "ollama-ai-provider-v2": "^3.5.0",
     "react": "^19.2.5",
     "zod": "^4.0.16"
@@ -26,6 +62,7 @@
     "@types/diff": "^7.0.2",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
+    "tsup": "^8.5.1",
     "tsx": "^4.19.2",
     "typescript": "^6.0.3"
   },

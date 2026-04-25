@@ -1,3 +1,7 @@
 node_modules/
+dist/
+.bonfire/
+.DS_Store
 debug.log
 *.bkp.json
+bonfire.config.json
