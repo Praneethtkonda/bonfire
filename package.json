@@ -15,6 +15,7 @@
     "local-first"
   ],
   "license": "MIT",
+  "author": "Praneeth TSS",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/your-org/bonfire.git"

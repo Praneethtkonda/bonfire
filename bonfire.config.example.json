@@ -3,11 +3,11 @@
     "active": "llama.cpp",
     "ollama": {
       "baseURL": "http://localhost:11434/api",
-      "model": "qwen2.5-coder:latest"
+      "model": "qwen3.6:latest"
     },
     "llama.cpp": {
       "baseURL": "http://127.0.0.1:8080/v1",
-      "model": "qwen3-coder:a3b"
+      "model": "unsloth/Qwen3.6-35B-A3B"
     }
   },
   "mcpServers": {

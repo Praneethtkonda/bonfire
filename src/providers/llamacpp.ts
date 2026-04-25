@@ -7,7 +7,7 @@ import type { ResolvedProvider } from './types.js';
 // backed by @ai-sdk/openai-compatible and point baseURL at the local server.
 // https://github.com/ggml-org/llama.cpp
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1';
-const DEFAULT_MODEL = 'local-model';
+const DEFAULT_MODEL = 'qwen3.6:latest';
 
 export async function createLlamaCppProvider(input: {
   env: NodeJS.ProcessEnv;
@@ -15,7 +15,7 @@ export async function createLlamaCppProvider(input: {
 }): Promise<ResolvedProvider> {
   const cfg = (await loadConfig()).provider?.['llama.cpp'] ?? {};
   const baseURL = input.env.LLAMACPP_BASE_URL ?? cfg.baseURL ?? DEFAULT_BASE_URL;
-  const modelId = input.env.BONFIRE_MODEL ?? cfg.model ?? DEFAULT_MODEL;
+  const modelId = cfg.model ?? input.env.BONFIRE_MODEL ?? DEFAULT_MODEL;
   const apiKey = input.env.LLAMACPP_API_KEY ?? cfg.apiKey;
 
   const sdk = createOpenAICompatible({

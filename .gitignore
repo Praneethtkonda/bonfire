@@ -4,4 +4,4 @@ dist/
 .DS_Store
 debug.log
 *.bkp.json
-bonfire.config.json
+
