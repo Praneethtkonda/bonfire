@@ -409,7 +409,7 @@ src/
     safe-path.ts       # realpath-aware allowlist (closes symlink escapes)
     approval.ts        # tri-state yes/no/always handler
     shell-policy.ts    # hardcoded deny-list + per-config allow/deny patterns
-    file-tools.ts, shell-tool.ts, navigate-tool.ts
+    file-tools.ts, shell-tool.ts, navigate-tool.ts, fetch-tool.ts
   mcp/
     index.ts, stdio.ts, http.ts, windows.ts
   session/
