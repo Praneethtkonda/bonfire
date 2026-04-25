@@ -3,16 +3,22 @@ import { exitCommand } from './exit.js';
 import { dirsCommand, addDirCommand } from './dirs.js';
 import { codemapCommand } from './codemap.js';
 import { sessionsCommand } from './sessions.js';
+import { systemCommand } from './system.js';
+import { skillsCommand } from './skills.js';
+import { initCommand } from './init.js';
 import { makeHelpCommand } from './help.js';
 
 export type { CommandContext, SlashCommand };
 
 const baseCommands: SlashCommand[] = [
   exitCommand,
+  initCommand,
   dirsCommand,
   addDirCommand,
   codemapCommand,
   sessionsCommand,
+  systemCommand,
+  skillsCommand,
 ];
 
 export const commands: SlashCommand[] = [

@@ -1,6 +1,7 @@
 import { editFileTool, listDirTool, readFileTool, writeFileTool } from './file-tools.js';
 import { shellTool } from './shell-tool.js';
 import { navigateTool } from './navigate-tool.js';
+import { loadSkillTool } from '../skills/index.js';
 
 export type { ApprovalRequest, ApprovalDecision, ApprovalHandler } from './approval.js';
 export { setApprovalHandler } from './approval.js';
@@ -15,6 +16,7 @@ export const tools = {
   navigate: navigateTool,
   list_dir: listDirTool,
   shell: shellTool,
+  load_skill: loadSkillTool,
 };
 
 export interface ToolDescriptor {
@@ -30,6 +32,7 @@ const BUILTIN_DESCRIPTIONS: Record<keyof typeof tools, string> = {
   navigate: 'Walk the codemap with one-line summaries',
   list_dir: 'List directory entries (raw, no summaries)',
   shell: 'Run a shell command (approval gated, deny-list applied)',
+  load_skill: 'Load detailed instructions for a named skill',
 };
 
 export function describeBuiltins(): ToolDescriptor[] {

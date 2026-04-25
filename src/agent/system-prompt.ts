@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { getAllowedDirs } from '../tools/index.js';
 import { loadConfig } from '../config.js';
+import { loadSkills, type Skill } from '../skills/index.js';
 
 const BASE_PROMPT = `You are bonfire, a terminal coding assistant.
 
@@ -57,7 +58,7 @@ async function gatherOverrides(cwd: string): Promise<string[]> {
   const overrides: string[] = [];
   const global = await readIfExists(resolve(homedir(), '.bonfire', 'system.md'));
   if (global) overrides.push(global);
-  const project = await readIfExists(resolve(cwd, '.nano', 'system.md'));
+  const project = await readIfExists(resolve(cwd, '.bonfire', 'system.md'));
   if (project) overrides.push(project);
   if (cfg.systemPrompt?.trim()) overrides.push(cfg.systemPrompt.trim());
   return overrides;
@@ -70,15 +71,29 @@ function dirsBlock(): string {
   return `\nAdditional allowed directories (pass absolute paths to tools):\n${extras}`;
 }
 
+function skillsBlock(skills: Skill[]): string {
+  if (skills.length === 0) return '';
+  const lines = skills.map((s) => {
+    const desc = s.description ? ` — ${s.description}` : '';
+    return `- ${s.name}${desc}`;
+  });
+  return `\n## Available skills\n${lines.join(
+    '\n',
+  )}\n\nWhen a request matches one of these, call \`load_skill(name)\` to fetch its detailed instructions, then follow them for the rest of the turn.`;
+}
+
 export async function buildSystemPrompt(cwd: string = process.cwd()): Promise<string> {
   const cfg = await loadConfig();
   const mode = cfg.systemPromptMode ?? 'append';
   const base = BASE_PROMPT.replace('{{PLATFORM_HINT}}', platformHint());
   const overrides = await gatherOverrides(cwd);
+  const skills = await loadSkills(cwd);
+
+  const tail = dirsBlock() + skillsBlock(skills);
 
   if (mode === 'replace' && overrides.length > 0) {
-    return overrides.join('\n\n') + dirsBlock();
+    return overrides.join('\n\n') + tail;
   }
   const sections = [base, ...overrides].filter(Boolean);
-  return sections.join('\n\n') + dirsBlock();
+  return sections.join('\n\n') + tail;
 }
