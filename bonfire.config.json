@@ -2,7 +2,7 @@
   "provider": {
     "active": "ollama",
     "ollama": {
-      "baseURL": "http://127.0.0.1:11434/v1",
+      "baseURL": "http://127.0.0.1:11434/api",
       "model": "qwen3.6:latest"
     },
     "llama.cpp": {
