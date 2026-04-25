@@ -324,6 +324,7 @@ Or use environment variables for quick swaps:
 | `edit_file` | Exact-string replace — **diff-approval gated** |
 | `list_dir` | Raw directory listing |
 | `shell` | Run a shell command — **approval gated, deny-list applied** |
+| `fetch_url` | Fetch an http(s) URL — HTML stripped to text, 200 KB cap, 30 s timeout |
 | `load_skill` | Load a named skill's full instructions on demand |
 
 ---
@@ -386,7 +387,7 @@ For llama.cpp, tool calling requires `llama-server --jinja`.
 - [x] Configurable system prompt — `~/.bonfire/system.md` + project override
 - [ ] Editable diffs (`y` / `n` / `e` opens the patch in `$EDITOR`)
 - [ ] Side-by-side model race mode
-- [ ] Local RAG via a small embedding model
+- [ ] Local RAG tool via a small embedding model
 - [ ] First-run benchmark (tokens/sec per installed model)
 - [ ] Auto-verify loop — typecheck/test after each edit, feed failures back
 
