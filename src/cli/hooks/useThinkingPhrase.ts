@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const ROTATE_MS = 2400;
+const ROTATE_MS = 5000;
 
 const GENERIC = [
   'thinking…',
