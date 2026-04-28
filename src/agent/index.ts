@@ -35,6 +35,7 @@ export function listTools(): ToolDescriptor[] {
 export async function* runAgent(
   history: ModelMessage[],
   userInput: string,
+  options?: { signal?: AbortSignal },
 ): AsyncGenerator<AgentEvent> {
   const messages: ModelMessage[] = [...history, { role: 'user', content: userInput }];
 
@@ -52,9 +53,11 @@ export async function* runAgent(
       tools: mergedTools,
       stopWhen: stepCountIs(100),
       temperature: 0.2,
+      abortSignal: options?.signal,
     });
 
     for await (const part of result.fullStream) {
+      if (options?.signal?.aborted) break;
       const ev = normalizePart(part as Parameters<typeof normalizePart>[0]);
       if (ev) yield ev;
     }
