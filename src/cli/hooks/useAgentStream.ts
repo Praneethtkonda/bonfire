@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import type { ModelMessage } from 'ai';
 import { runAgent, type TokenUsage } from '../../agent/index.js';
 import { saveSession, type Session } from '../../session/index.js';
@@ -28,6 +28,9 @@ interface UseAgentStreamResult {
   totals: UsageTotals;
   lastUsage: TokenUsage | null;
   send: (text: string) => Promise<void>;
+  abort: () => void;
+  setActive: (a: string) => void;
+  setActiveTool: (t: ActiveTool | null) => void;
 }
 
 function errorMessage(e: unknown): string {
@@ -44,6 +47,7 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
   const [tick, setTick] = useState(0);
   const [totals, setTotals] = useState<UsageTotals>({ input: 0, output: 0, turns: 0 });
   const [lastUsage, setLastUsage] = useState<TokenUsage | null>(null);
+  const abortRef = React.useRef<() => void>(() => {});
 
   const appendLines = useCallback((...newLines: Line[]) => {
     if (newLines.length === 0) return;
@@ -65,8 +69,23 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
         setActive('');
       };
 
+      const controller = new AbortController();
+      let aborted = false;
+
+      // Expose abort
+      abortRef.current = () => {
+        if (!aborted) {
+          aborted = true;
+          controller.abort();
+        }
+      };
+
       try {
-        for await (const ev of runAgent(history, text)) {
+        for await (const ev of runAgent(history, text, { signal: controller.signal })) {
+          if (aborted) {
+            appendLines({ kind: 'error', text: 'aborted' });
+            break;
+          }
           if (ev.type === 'text') {
             current += ev.text ?? '';
             setActive(current);
@@ -116,7 +135,9 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
           }
         }
       } catch (e: unknown) {
-        appendLines({ kind: 'error', text: errorMessage(e) });
+        if (!aborted) {
+          appendLines({ kind: 'error', text: errorMessage(e) });
+        }
       }
       setActive('');
       setActiveTool(null);
@@ -124,6 +145,10 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
     },
     [appendLines, currentSession, cwd, history, setCurrentSession],
   );
+
+  const abort = useCallback(() => {
+    abortRef.current();
+  }, []);
 
   return {
     lines,
@@ -138,5 +163,8 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
     totals,
     lastUsage,
     send,
+    abort,
+    setActive,
+    setActiveTool,
   };
 }
