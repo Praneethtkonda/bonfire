@@ -52,7 +52,21 @@ export function App() {
       else if (ch === 'n' || ch === 'N' || key.escape) decide('no');
       return;
     }
-    if (key.escape && !input) exit();
+    // Esc precedence: abort while busy → clear pending input → exit when idle.
+    if (key.escape) {
+      if (stream.busy) {
+        stream.abort();
+        stream.setBusy(false);
+        stream.setActive('');
+        stream.setActiveTool(null);
+        return;
+      }
+      if (input) {
+        setInput('');
+        return;
+      }
+      exit();
+    }
   });
 
   const handleInputKey = (_ch: string, key: KeyMeta): boolean => {
@@ -67,7 +81,10 @@ export function App() {
     }
     if (key.tab) {
       const choice = suggestions[suggestionIndex];
-      if (choice) setInput(choice.insert);
+      if (choice) {
+        setInput(choice.insert);
+        setSuggestionIndex(0);
+      }
       return true;
     }
     return false;
