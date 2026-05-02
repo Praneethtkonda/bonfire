@@ -13,6 +13,8 @@ interface PromptBarProps {
   onChange: (v: string) => void;
   onSubmit: (v: string) => void;
   onKey?: (input: string, key: KeyMeta) => boolean;
+  /** When true, hides the prompt entirely (used during reconfigure mode) */
+  hidden?: boolean;
 }
 
 export function PromptBar({
@@ -24,7 +26,11 @@ export function PromptBar({
   onChange,
   onSubmit,
   onKey,
+  hidden,
 }: PromptBarProps) {
+  if (hidden) {
+    return null;
+  }
   if (approvalHelp) {
     return <Text color="yellow">{approvalHelp}</Text>;
   }
