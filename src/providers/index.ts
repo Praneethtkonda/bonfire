@@ -1,6 +1,7 @@
 import { loadConfig, type ProviderId } from '../config.js';
 import { createLlamaCppProvider } from './llamacpp.js';
 import { createOllamaProvider } from './ollama.js';
+import { createRemoteProvider } from './remote.js';
 import type { ResolvedProvider } from './types.js';
 
 export type { ResolvedProvider } from './types.js';
@@ -8,10 +9,11 @@ export type { ResolvedProvider } from './types.js';
 const FACTORIES: Record<ProviderId, typeof createOllamaProvider> = {
   ollama: createOllamaProvider,
   'llama.cpp': createLlamaCppProvider,
+  remote: createRemoteProvider,
 };
 
 function isProviderId(value: string | undefined): value is ProviderId {
-  return value === 'ollama' || value === 'llama.cpp';
+  return value === 'ollama' || value === 'llama.cpp' || value === 'remote';
 }
 
 export async function resolveProvider(input: {
