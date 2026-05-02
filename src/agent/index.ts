@@ -1,13 +1,13 @@
 import { streamText, stepCountIs, type ModelMessage } from 'ai';
 import { tools as builtinTools, describeBuiltins, type ToolDescriptor } from '../tools/index.js';
 import { loadMcpServers, type LoadedMcp } from '../mcp/index.js';
-import { getProvider, describeProvider } from './provider.js';
+import { getProvider, describeProvider, resetProvider } from './provider.js';
 import { normalizePart, type AgentEvent, type TokenUsage } from './stream.js';
 import { buildSystemPrompt } from './system-prompt.js';
 
 export type { AgentEvent, TokenUsage };
 export type { ToolDescriptor };
-export { describeProvider };
+export { describeProvider, resetProvider };
 
 let mcpState: LoadedMcp | null = null;
 

@@ -48,6 +48,10 @@ export async function getProvider(): Promise<ResolvedProvider> {
   return cached;
 }
 
+export function resetProvider(): void {
+  cached = null;
+}
+
 export async function describeProvider(): Promise<string> {
   return (await getProvider()).label;
 }
