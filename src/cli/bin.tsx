@@ -2,6 +2,7 @@ import React from 'react';
 import { render } from 'ink';
 import { initMcp, shutdownMcp } from '../agent/index.js';
 import { App } from './App.js';
+import { checkAndRunOnboarding } from './onboarding.js';
 
 if (!process.stdin.isTTY) {
   const hint =
@@ -15,6 +16,12 @@ if (!process.stdin.isTTY) {
 const mcpToolCount = await initMcp();
 if (mcpToolCount > 0) {
   console.error(`[mcp] ${mcpToolCount} tool(s) available`);
+}
+
+const shouldExit = await checkAndRunOnboarding();
+if (shouldExit) {
+  await shutdownMcp();
+  process.exit(0);
 }
 
 const app = render(<App />);
