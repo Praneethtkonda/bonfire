@@ -6,6 +6,8 @@ import { sessionsCommand } from './sessions.js';
 import { systemCommand } from './system.js';
 import { skillsCommand } from './skills.js';
 import { initCommand } from './init.js';
+import { configCommand } from './config.js';
+import { reconfigureCommand } from './reconfigure.js';
 import { makeHelpCommand } from './help.js';
 
 export type { CommandContext, SlashCommand };
@@ -19,6 +21,8 @@ const baseCommands: SlashCommand[] = [
   sessionsCommand,
   systemCommand,
   skillsCommand,
+  configCommand,
+  reconfigureCommand,
 ];
 
 export const commands: SlashCommand[] = [
