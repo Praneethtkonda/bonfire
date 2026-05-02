@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { resolve, dirname } from 'node:path';
+import { homedir } from 'node:os';
 
 export interface StdioMcpServerConfig {
   type?: 'stdio';
@@ -40,6 +41,40 @@ export function expandEnvMap(
   return out;
 }
 
+export const DEFAULT_CONFIG: NanoConfig = {
+  provider: {
+    active: 'ollama',
+    ollama: {
+      baseURL: 'http://127.0.0.1:11434/api',
+      model: 'qwen3.6:latest',
+    },
+    'llama.cpp': {
+      baseURL: 'http://127.0.0.1:8080/v1',
+      model: 'unsloth/Qwen3.6-35B-A3B',
+    },
+    remote: {
+      baseURL: '',
+      model: '',
+    },
+  },
+  mcpServers: {},
+  security: {
+    shell: {
+      requireApproval: true,
+    },
+    mcpRequireApproval: false,
+  },
+};
+
+export function getConfigPath(): string {
+  const home = homedir();
+  const isWindows = process.platform === 'win32';
+  const baseDir = isWindows
+    ? process.env.APPDATA || resolve(home, 'AppData', 'Roaming')
+    : resolve(home, '.config');
+  return resolve(baseDir, 'bonfire', 'config.json');
+}
+
 export interface OllamaProviderConfig {
   baseURL?: string;
   model?: string;
@@ -52,12 +87,20 @@ export interface LlamaCppProviderConfig {
   headers?: Record<string, string>;
 }
 
-export type ProviderId = 'ollama' | 'llama.cpp';
+export interface RemoteProviderConfig {
+  baseURL: string;
+  model: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+}
+
+export type ProviderId = 'ollama' | 'llama.cpp' | 'remote';
 
 export interface ProviderConfig {
   active?: ProviderId;
   ollama?: OllamaProviderConfig;
   'llama.cpp'?: LlamaCppProviderConfig;
+  remote?: RemoteProviderConfig;
 }
 
 export interface ShellSecurityConfig {
@@ -85,18 +128,63 @@ export interface NanoConfig {
   security?: SecurityConfig;
 }
 
-const CONFIG_FILENAME = 'bonfire.config.json';
-
 let cached: NanoConfig | null = null;
 
 export async function loadConfig(): Promise<NanoConfig> {
   if (cached) return cached;
-  const path = resolve(process.cwd(), CONFIG_FILENAME);
+  const path = getConfigPath();
   try {
     const raw = await readFile(path, 'utf-8');
-    cached = JSON.parse(raw) as NanoConfig;
+    const userConfig = JSON.parse(raw) as NanoConfig;
+    cached = mergeConfig(DEFAULT_CONFIG, userConfig);
   } catch {
-    cached = {};
+    cached = DEFAULT_CONFIG;
   }
   return cached;
+}
+
+function mergeConfig(defaults: NanoConfig, user: Partial<NanoConfig>): NanoConfig {
+  const result: NanoConfig = { ...defaults };
+  
+  if (user.provider) {
+    result.provider = { ...defaults.provider, ...user.provider };
+    if (user.provider.ollama && defaults.provider?.ollama) {
+      result.provider.ollama = { ...defaults.provider.ollama, ...user.provider.ollama };
+    }
+    if (user.provider['llama.cpp'] && defaults.provider?.['llama.cpp']) {
+      result.provider['llama.cpp'] = { ...defaults.provider['llama.cpp'], ...user.provider['llama.cpp'] };
+    }
+  }
+  
+  if (user.mcpServers) {
+    result.mcpServers = { ...defaults.mcpServers, ...user.mcpServers };
+  }
+  
+  if (user.security) {
+    result.security = { ...defaults.security, ...user.security };
+    if (user.security.shell && defaults.security?.shell) {
+      result.security.shell = { ...defaults.security.shell, ...user.security.shell };
+    }
+  }
+  
+  if (user.systemPrompt !== undefined) {
+    result.systemPrompt = user.systemPrompt;
+  }
+  if (user.systemPromptMode) {
+    result.systemPromptMode = user.systemPromptMode;
+  }
+  
+  return result;
+}
+
+export async function saveConfig(config: NanoConfig): Promise<void> {
+  const path = getConfigPath();
+  const dir = dirname(path);
+  await mkdir(dir, { recursive: true });
+  await writeFile(path, JSON.stringify(config, null, 2) + '\n');
+  cached = null;
+}
+
+export function clearConfigCache(): void {
+  cached = null;
 }
