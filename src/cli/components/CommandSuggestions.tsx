@@ -2,7 +2,8 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { CommandSuggestion } from '../commands/index.js';
 
-const MAX_VISIBLE = 6;
+const MAX_VISIBLE = 10;
+const VISIBLE_START = 0;
 
 export function CommandSuggestions({
   items,
@@ -12,9 +13,12 @@ export function CommandSuggestions({
   selected: number;
 }) {
   if (items.length === 0) return null;
-  const shown = items.slice(0, MAX_VISIBLE);
-  const overflow = items.length - shown.length;
-  const triggerWidth = Math.max(...shown.map((s) => s.trigger.length));
+  
+  const startIdx = Math.max(0, selected - 2);
+  const endIdx = Math.min(items.length, startIdx + MAX_VISIBLE);
+  const shown = items.slice(startIdx, endIdx);
+  const triggerWidth = Math.max(...items.map((s) => s.trigger.length));
+  
   return (
     <Box
       flexDirection="column"
@@ -23,8 +27,10 @@ export function CommandSuggestions({
       paddingX={1}
       marginTop={1}
     >
-      {shown.map((s, i) => {
-        const isSel = i === selected;
+      {shown.map((_, idx) => {
+        const itemIdx = startIdx + idx;
+        const isSel = itemIdx === selected;
+        const s = items[itemIdx];
         return (
           <Text key={s.trigger} color={isSel ? 'black' : 'cyan'} backgroundColor={isSel ? 'cyan' : undefined}>
             {isSel ? '▸ ' : '  '}
@@ -32,8 +38,8 @@ export function CommandSuggestions({
           </Text>
         );
       })}
-      {overflow > 0 ? (
-        <Text dimColor>  … {overflow} more (keep typing to filter)</Text>
+      {items.length > MAX_VISIBLE && endIdx < items.length ? (
+        <Text dimColor>  … {items.length - endIdx} more</Text>
       ) : null}
       <Text dimColor>  ↑↓ to move · Tab to complete · Enter to run</Text>
     </Box>

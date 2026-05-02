@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import type { Session } from '../session/index.js';
-import { listTools, type ToolDescriptor } from '../agent/index.js';
+import { listTools, type ToolDescriptor, resetProvider, describeProvider } from '../agent/index.js';
 import type { CodemapProgress } from './types.js';
 import { runSlashCommand, suggestCommands } from './commands/index.js';
 import { useApproval } from './hooks/useApproval.js';
@@ -16,13 +16,14 @@ import { ApprovalPrompt, approvalHelpText } from './components/ApprovalPrompt.js
 import { PromptBar } from './components/PromptBar.js';
 import { ToolsPane } from './components/ToolsPane.js';
 import { CommandSuggestions } from './components/CommandSuggestions.js';
+import { ReconfigurePrompt } from './components/ReconfigurePrompt.js';
 import type { KeyMeta } from './components/MultilineInput.js';
 import { truncate } from './util.js';
+import { loadConfig, saveConfig, clearConfigCache, type NanoConfig } from '../config.js';
 
 export function App() {
   const { exit } = useApp();
   const cwd = process.cwd();
-  const providerLabel = useProvider();
   const { pending, decide } = useApproval();
 
   const [input, setInput] = useState('');
@@ -30,6 +31,11 @@ export function App() {
   const [codemapProgress, setCodemapProgress] = useState<CodemapProgress | null>(null);
   const [tools, setTools] = useState<ToolDescriptor[]>([]);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [reconfigureMode, setReconfigureMode] = useState(false);
+  const [existingConfig, setExistingConfig] = useState<NanoConfig | null>(null);
+  const [providerKey, setProviderKey] = useState(0);
+
+  const providerLabel = useProvider(providerKey);
 
   const stream = useAgentStream({ cwd, currentSession, setCurrentSession });
   const thinkingPhrase = useThinkingPhrase(stream.busy, stream.activeTool?.name ?? null);
@@ -70,7 +76,7 @@ export function App() {
   });
 
   const handleInputKey = (_ch: string, key: KeyMeta): boolean => {
-    if (suggestions.length === 0) return false;
+    if (reconfigureMode || suggestions.length === 0) return false;
     if (key.upArrow) {
       setSuggestionIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
       return true;
@@ -87,13 +93,29 @@ export function App() {
       }
       return true;
     }
+    if (key.return) {
+      const choice = suggestions[suggestionIndex];
+      if (choice) {
+        setInput(choice.insert);
+        setSuggestionIndex(0);
+        onSubmit(choice.insert);
+        return true;
+      }
+    }
     return false;
   };
 
   const onSubmit = async (text: string) => {
-    if (!text.trim() || stream.busy) return;
+    if (!text.trim() || stream.busy || reconfigureMode) return;
     const trimmed = text.trim();
     setInput('');
+
+    if (trimmed === '/reconfigure') {
+      const config = await loadConfig();
+      setExistingConfig(config);
+      setReconfigureMode(true);
+      return;
+    }
 
     const handled = await runSlashCommand(
       {
@@ -112,6 +134,24 @@ export function App() {
     if (handled) return;
 
     await stream.send(text);
+  };
+
+  const handleReconfigureComplete = async (config: NanoConfig) => {
+    await saveConfig(config);
+    clearConfigCache();
+    resetProvider();
+    setReconfigureMode(false);
+    const newLabel = await describeProvider();
+    setProviderKey(k => k + 1);
+    stream.appendLines({ 
+      kind: 'assistant', 
+      text: `✅ Config updated!\nActive provider: ${config.provider?.active}\n\nNew provider: ${newLabel}` 
+    });
+  };
+
+  const handleReconfigureCancel = () => {
+    setReconfigureMode(false);
+    setExistingConfig(null);
   };
 
   return (
@@ -136,7 +176,15 @@ export function App() {
 
           {pending ? <ApprovalPrompt request={pending.req} /> : null}
 
-          {!pending && !stream.busy && suggestions.length > 0 ? (
+          {reconfigureMode && existingConfig ? (
+            <ReconfigurePrompt
+              existingConfig={existingConfig}
+              onComplete={handleReconfigureComplete}
+              onCancel={handleReconfigureCancel}
+            />
+          ) : null}
+
+          {!reconfigureMode && !pending && !stream.busy && suggestions.length > 0 ? (
             <CommandSuggestions items={suggestions} selected={suggestionIndex} />
           ) : null}
 
@@ -150,6 +198,7 @@ export function App() {
               onChange={setInput}
               onSubmit={onSubmit}
               onKey={handleInputKey}
+              hidden={reconfigureMode}
             />
           </Box>
         </Box>
