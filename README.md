@@ -28,7 +28,7 @@ The model lives on a machine **you control** — your laptop, your homelab, a fr
 
 ### Bring your own model
 
-[Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp), or **any remote API** (Google Gemini, NVIDIA NIM, OpenAI, etc.). `qwen3.6:latest`, `llama3.3`, `deepseek-coder-v2`, `gpt-4o-mini` — whatever fits your hardware and your taste.
+[Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp), or **any OpenAI-compatible API** (Google Gemini, NVIDIA NIM, OpenAI, custom endpoints). `qwen3.6:latest`, `llama3.3`, `deepseek-coder-v2`, `gpt-4o-mini` — whatever fits your hardware and your taste.
 
 ### Codemap — your repo as a tree of summaries
 
@@ -103,7 +103,7 @@ Best for: Mac mini cluster, the 4090 in the closet, the old gaming PC you stoppe
 [ laptop ]  bonfire  ──→  Google Gemini / OpenAI / NVIDIA NIM / any OpenAI-compatible API
 ```
 
-Connect to any remote API. Great for when you're traveling, don't have a GPU, or want to use a specific cloud model.
+Connect to any OpenAI-compatible API endpoint. Great for when you're traveling, don't have a GPU, or want to use a specific cloud model.
 
 ### 4. Shared rig with friends
 
@@ -146,7 +146,7 @@ bonfire
 
 > The `--jinja` flag is **mandatory** for tool calling. Without it, bonfire's tool calls won't reach the model.
 
-### Using a remote API (Google Gemini, OpenAI, etc.)
+### Using an OpenAI-compatible API (Google Gemini, OpenAI, NVIDIA NIM, etc.)
 
 ```bash
 bonfire
@@ -204,22 +204,19 @@ Drop a `bonfire.config.json` in your config directory. Everything is optional.
 ```json
 {
   "provider": {
-    "active": "ollama",
+    "active": "remote",
     "ollama": {
       "baseURL": "http://localhost:11434/api",
       "model": "qwen3.6:latest"
     },
     "llama.cpp": {
       "baseURL": "http://127.0.0.1:8080/v1",
-      "model": "qwen3.6:latest"
+      "model": "unsloth/Qwen3.6-35B-A3B"
     },
     "remote": {
       "baseURL": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
-      "apiKey": "your-api-key",
-      "headers": {
-        "x-goog-api-key": "your-google-key"
-      }
+      "apiKey": ""
     }
   },
 
@@ -249,7 +246,7 @@ Drop a `bonfire.config.json` in your config directory. Everything is optional.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `BONFIRE_PROVIDER` | `ollama` | `ollama`, `llama.cpp`, or `remote` |
-| `BONFIRE_MODEL` | provider-specific | Model id |
+| `BONFIRE_MODEL` | provider-specific | Model id (Ollama tag, or label for llama.cpp) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama host |
 | `LLAMACPP_BASE_URL` | `http://127.0.0.1:8080/v1` | `llama-server` endpoint |
 | `LLAMACPP_API_KEY` | — | Optional bearer token |
