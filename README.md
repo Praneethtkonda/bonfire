@@ -10,8 +10,6 @@
 
 No keys. No meters. No data leaks. Just you and the box you trust.
 
-<!-- ![bonfire demo](./docs/demo.gif) -->
-
 </div>
 
 ---
@@ -22,7 +20,7 @@ There's no shortage of terminal coding assistants. Here's what bonfire does that
 
 ### Local-first, by default
 
-The model lives on a machine **you control** — your laptop, your homelab, a friend's GPU rig.  bonfire is just the CLI that talks to it.
+The model lives on a machine **you control** — your laptop, your homelab, a friend's GPU rig. bonfire is just the CLI that talks to it.
 
 - No API keys to leak.
 - No tokens to budget.
@@ -30,7 +28,7 @@ The model lives on a machine **you control** — your laptop, your homelab, a fr
 
 ### Bring your own model
 
-[Ollama](https://ollama.com) on Mac / Linux. [llama.cpp](https://github.com/ggml-org/llama.cpp) when you want serious control. Any OpenAI-compatible endpoint when you're on the road. `qwen3.6:latest`, `llama3.3`, `deepseek-coder-v2` — whatever fits your hardware and your taste.
+[Ollama](https://ollama.com), [llama.cpp](https://github.com/ggml-org/llama.cpp), or **any remote API** (Google Gemini, NVIDIA NIM, OpenAI, etc.). `qwen3.6:latest`, `llama3.3`, `deepseek-coder-v2`, `gpt-4o-mini` — whatever fits your hardware and your taste.
 
 ### Codemap — your repo as a tree of summaries
 
@@ -99,7 +97,15 @@ Type on the machine you like. Run the **model** on whichever box has the GPU. Se
 
 Best for: Mac mini cluster, the 4090 in the closet, the old gaming PC you stopped using.
 
-### 3. Shared rig with friends
+### 3. Remote APIs (cloud / edge)
+
+```
+[ laptop ]  bonfire  ──→  Google Gemini / OpenAI / NVIDIA NIM / any OpenAI-compatible API
+```
+
+Connect to any remote API. Great for when you're traveling, don't have a GPU, or want to use a specific cloud model.
+
+### 4. Shared rig with friends
 
 ```
 laptop A   bonfire ─┐
@@ -119,44 +125,36 @@ Best for: small teams, study groups, family GPU.
 
 ```bash
 npm install -g bonfire
+bonfire
 ```
 
-Now stand up a model. **Pick the path that fits your platform.**
+On first run, bonfire will guide you through a quick setup. Choose your provider (ollama, llama.cpp, or remote), and you're ready to go.
 
-### macOS / Linux — Ollama is the easy path
-
-Ollama is the most seamless option on Apple silicon and Linux. Single binary, single command:
+### Using Ollama (recommended for Mac/Linux)
 
 ```bash
 ollama pull qwen3.6:latest
-
-cd your-project
 bonfire
 ```
 
-You're done. Skip to [first prompts](#try-these-first).
+### Using llama.cpp (full control)
 
-### Windows — pick by your hardware
-
-**8 – 16 GB RAM → Ollama.** It works on Windows and is easier to set up.
-
-```powershell
-ollama pull qwen3.6:latest
-
-cd your-project
-bonfire
-```
-
-**32 GB+ RAM and you want speed → llama.cpp.** This is the recommended path on Windows for power users. `llama-server` gives you direct control over the quantization, KV cache size, GPU layer offload, and the tool-calling Jinja template — all of which matter when you're feeding a serious model.
-
-```powershell
+```bash
 .\llama-server.exe --jinja -m .\qwen3.6.gguf -c 8192 -ngl 99
-
-cd your-project
 bonfire
 ```
 
 > The `--jinja` flag is **mandatory** for tool calling. Without it, bonfire's tool calls won't reach the model.
+
+### Using a remote API (Google Gemini, OpenAI, etc.)
+
+```bash
+bonfire
+# Select "remote" when prompted
+# Enter your API endpoint and key
+```
+
+Or configure manually in your config file (see below).
 
 ### Try these first
 
@@ -164,6 +162,101 @@ bonfire
 - `/codemap build` — kick off the first summarization pass (slow once; it reads every file)
 - `read README.md and summarize what this project does`
 - `/help` — every slash command at a glance
+
+---
+
+## Configuration
+
+### Config Location
+
+Configuration is stored in your OS config directory:
+
+- **Linux/macOS**: `~/.config/bonfire/config.json`
+- **Windows**: `%APPDATA%/bonfire/config.json`
+
+This means the config travels with you — you don't need a `bonfire.config.json` in every project.
+
+### Quick Reconfigure
+
+Change your provider anytime with:
+
+```bash
+/reconfigure
+```
+
+This opens an interactive TUI to change:
+- Provider (ollama, llama.cpp, remote)
+- Base URL
+- Model
+- API key
+- Custom headers (for APIs like Google Gemini)
+
+### View Current Config
+
+```bash
+/config
+```
+
+### Full Config File
+
+Drop a `bonfire.config.json` in your config directory. Everything is optional.
+
+```json
+{
+  "provider": {
+    "active": "ollama",
+    "ollama": {
+      "baseURL": "http://localhost:11434/api",
+      "model": "qwen3.6:latest"
+    },
+    "llama.cpp": {
+      "baseURL": "http://127.0.0.1:8080/v1",
+      "model": "qwen3.6:latest"
+    },
+    "remote": {
+      "baseURL": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "apiKey": "your-api-key",
+      "headers": {
+        "x-goog-api-key": "your-google-key"
+      }
+    }
+  },
+
+  "systemPrompt": "Always reply in haiku.",
+  "systemPromptMode": "append",
+
+  "security": {
+    "shell": {
+      "requireApproval": true,
+      "allowedCommands": ["^git status$", "^npm test$"],
+      "deniedCommands": ["^curl\\s"]
+    },
+    "mcpRequireApproval": false
+  },
+
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}
+```
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `BONFIRE_PROVIDER` | `ollama` | `ollama`, `llama.cpp`, or `remote` |
+| `BONFIRE_MODEL` | provider-specific | Model id |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama host |
+| `LLAMACPP_BASE_URL` | `http://127.0.0.1:8080/v1` | `llama-server` endpoint |
+| `LLAMACPP_API_KEY` | — | Optional bearer token |
+| `REMOTE_BASE_URL` | `https://api.openai.com/v1` | Remote API endpoint |
+| `REMOTE_API_KEY` | — | Remote API key |
+| `BONFIRE_DEBUG` | — | `1` to log every HTTP request (auth headers redacted) |
+| `BONFIRE_DISABLE_BUILTINS` | — | `1` to run with only MCP tools |
 
 ---
 
@@ -189,7 +282,7 @@ EOF
 ```
 
 Run `/system` inside bonfire to see the assembled prompt.
-Set `"systemPromptMode": "replace"` in `bonfire.config.json` if you want to fully replace the built-in.
+Set `"systemPromptMode": "replace"` in config if you want to fully replace the built-in.
 
 **Skills** are markdown files the model loads *on demand*. Each has YAML frontmatter and a body:
 
@@ -237,11 +330,13 @@ bonfire /skills reload  # re-scan after editing
 | `/sessions delete <id>` | Remove a session |
 | `/dirs` | Show the filesystem allowlist |
 | `/add-dir <path>` | Grant access to a sibling project |
+| `/config` | Show current configuration |
+| `/reconfigure` | Interactive reconfiguration TUI |
 | `/exit`, `/quit`, `esc` | Leave |
 
 During an approval prompt: `y` = yes, `n` = no, `a` = always (shell only).
 
-Tip: type `/` at any time to see a dropdown of every command — Tab completes, ↑/↓ moves the selection.
+Tip: type `/` at any time to see a dropdown of every command — Tab completes, ↑/↓ moves the selection, Enter executes selected command.
 
 ---
 
@@ -263,54 +358,7 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 
 **Filesystem allowlist.** All file tools refuse paths outside the allowed set. Symlinks inside an allowed dir can't escape it (realpath-checked). `/add-dir <path>` to extend.
 
-**Lightweight.** A single Node CLI, ~70 KB on npm. No Docker, no Electron, no daemons.
-
----
-
-## Configuration
-
-Drop a `bonfire.config.json` next to wherever you launch. Everything is optional.
-
-```json
-{
-  "provider": {
-    "active": "ollama",
-    "ollama":     { "baseURL": "http://localhost:11434/api", "model": "qwen3.6:latest" },
-    "llama.cpp":  { "baseURL": "http://127.0.0.1:8080/v1",   "model": "qwen3.6:latest" }
-  },
-
-  "systemPrompt": "Always reply in haiku.",
-  "systemPromptMode": "append",
-
-  "security": {
-    "shell": {
-      "requireApproval": true,
-      "allowedCommands": ["^git status$", "^npm test$"],
-      "deniedCommands":  ["^curl\\s"]
-    },
-    "mcpRequireApproval": false
-  },
-
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
-    }
-  }
-}
-```
-
-Or use environment variables for quick swaps:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `BONFIRE_PROVIDER` | `ollama` | `ollama` or `llama.cpp` |
-| `BONFIRE_MODEL` | provider-specific | Model id (Ollama tag, or label for llama.cpp) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama host |
-| `LLAMACPP_BASE_URL` | `http://127.0.0.1:8080/v1` | `llama-server` endpoint |
-| `LLAMACPP_API_KEY` | — | Optional bearer token |
-| `BONFIRE_DEBUG` | — | `1` to log every HTTP request (auth headers redacted) |
-| `BONFIRE_DISABLE_BUILTINS` | — | `1` to run with only MCP tools |
+**Lightweight.** A single Node CLI, ~100 KB on npm. No Docker, no Electron, no daemons.
 
 ---
 
@@ -371,6 +419,8 @@ Anything trained for tool calling:
 | `llama3-groq-tool-use:8b` | yes | Specifically tuned for tool calling |
 | `deepseek-coder-v2` | varies | Check the specific revision |
 | `gemma3` / `gemma2` | no | Not tool-tuned |
+| `gpt-4o-mini` (remote) | yes | Cloud option |
+| `gemini-2.0-flash-exp` (remote) | yes | Google Gemini via OpenAI compat |
 
 For llama.cpp, tool calling requires `llama-server --jinja`.
 
@@ -385,6 +435,10 @@ For llama.cpp, tool calling requires `llama-server --jinja`.
 - [x] Shell approval + hardcoded deny-list
 - [x] Skills support — drop-in `~/.bonfire/skills/<name>.md`
 - [x] Configurable system prompt — `~/.bonfire/system.md` + project override
+- [x] OS config directory (not project-level)
+- [x] Interactive reconfigure TUI (`/reconfigure`)
+- [x] Remote provider (any OpenAI-compatible API)
+- [x] Custom headers support
 - [ ] Editable diffs (`y` / `n` / `e` opens the patch in `$EDITOR`)
 - [ ] Side-by-side model race mode
 - [ ] Local RAG tool via a small embedding model
@@ -399,7 +453,7 @@ Issues and small PRs welcome. The codebase is intentionally minimal — favour c
 
 ```
 src/
-  config.ts            # bonfire.config.json loader
+  config.ts            # bonfire.config.json loader (OS config dir)
   agent/
     index.ts           # runAgent, initMcp, listTools
     provider.ts        # lazy provider, debug fetch with header redaction
@@ -420,15 +474,17 @@ src/
   codemap/
     walk.ts, summarize.ts, store.ts, index.ts, ignore.ts, types.ts
   providers/
-    index.ts, ollama.ts, llamacpp.ts, types.ts
+    index.ts, ollama.ts, llamacpp.ts, remote.ts, types.ts
   cli/
     bin.tsx            # entry: TTY check, MCP boot, render <App/>, signals
     App.tsx            # layout-only composition
     components/        # Header, Transcript, DiffPreview, ApprovalPrompt,
                        # ModifiedFilesPanel, UsageBar, MultilineInput,
-                       # CommandSuggestions, ToolsPane, PromptBar
+                       # CommandSuggestions, ToolsPane, PromptBar,
+                       # ReconfigurePrompt
     hooks/             # useAgentStream, useApproval, useProvider, useThinkingPhrase
-    commands/          # slash-command registry: codemap, sessions, dirs, help, exit
+    commands/          # slash-command registry
+    onboarding.ts      # first-run setup wizard
 ```
 
 ---
