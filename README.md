@@ -124,7 +124,7 @@ Best for: small teams, study groups, family GPU.
 ## Quick start
 
 ```bash
-npm install -g bonfire
+npm install -g @praneethtss/bonfire
 bonfire
 ```
 
