@@ -1,5 +1,5 @@
 {
-  "name": "bonfire",
+  "name": "@praneethtss/bonfire",
   "version": "0.1.0",
   "description": "A local-first terminal coding assistant. Streams tokens, previews diffs, and runs against any local model via Ollama or llama.cpp.",
   "keywords": [
