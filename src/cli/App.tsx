@@ -17,6 +17,7 @@ import { PromptBar } from './components/PromptBar.js';
 import { ToolsPane } from './components/ToolsPane.js';
 import { CommandSuggestions } from './components/CommandSuggestions.js';
 import { ReconfigurePrompt } from './components/ReconfigurePrompt.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { KeyMeta } from './components/MultilineInput.js';
 import { truncate } from './util.js';
 import { loadConfig, saveConfig, clearConfigCache, type NanoConfig } from '../config.js';
@@ -155,8 +156,9 @@ export function App() {
   };
 
   return (
-    <Box flexDirection="column">
-      <Header providerLabel={providerLabel} cwd={cwd} session={currentSession} />
+    <ErrorBoundary>
+      <Box flexDirection="column">
+        <Header providerLabel={providerLabel} cwd={cwd} session={currentSession} />
 
       <Box flexDirection="row">
         <Box flexDirection="column" flexGrow={1}>
@@ -206,5 +208,6 @@ export function App() {
         <ToolsPane tools={tools} activeTool={stream.activeTool?.name ?? null} />
       </Box>
     </Box>
+    </ErrorBoundary>
   );
 }
