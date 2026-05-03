@@ -18,11 +18,11 @@
   "author": "Praneeth TSS",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/bonfire.git"
+    "url": "git+https://github.com/praneethtkonda/bonfire.git"
   },
-  "homepage": "https://github.com/your-org/bonfire#readme",
+  "homepage": "https://github.com/praneethtkonda/bonfire#readme",
   "bugs": {
-    "url": "https://github.com/your-org/bonfire/issues"
+    "url": "https://github.com/praneethtkonda/bonfire/issues"
   },
   "type": "module",
   "bin": {
