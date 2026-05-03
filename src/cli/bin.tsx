@@ -27,6 +27,8 @@ if (shouldExit) {
 const app = render(<App />);
 
 const cleanup = async () => {
+  app.unmount();
+  process.stdout.write('\x1b[2J\x1b[0f');
   await shutdownMcp();
   process.exit(0);
 };
