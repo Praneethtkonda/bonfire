@@ -32,6 +32,35 @@ export function listTools(): ToolDescriptor[] {
   return [...builtins, ...mcp];
 }
 
+function formatAgentError(e: unknown): string {
+  if (e instanceof Error) {
+    const msg = e.message;
+    if (msg.includes('401') || msg.includes('Unauthorized')) {
+      return 'Authentication failed (401). Check your API key with /config or /reconfigure.';
+    }
+    if (msg.includes('403') || msg.includes('Forbidden')) {
+      return 'Forbidden (403). Check your API key permissions.';
+    }
+    if (msg.includes('429') || msg.includes('rate limit')) {
+      return 'Rate limit exceeded (429). Please wait and try again.';
+    }
+    if (msg.includes('500')) {
+      return 'Server error (500). The model service may be down.';
+    }
+    if (msg.includes('503') || msg.includes('unavailable')) {
+      return 'Service unavailable (503). The model service may be overloaded.';
+    }
+    if (msg.includes('ECONNREFUSED') || msg.includes('connect')) {
+      return 'Could not connect. Is the model server running?';
+    }
+    if (msg.includes('timeout') || msg.includes('timed out')) {
+      return 'Request timed out. The model may be slow or unresponsive.';
+    }
+    return msg;
+  }
+  return String(e);
+}
+
 export async function* runAgent(
   history: ModelMessage[],
   userInput: string,
@@ -65,6 +94,6 @@ export async function* runAgent(
     const finalMessages = (await result.response).messages;
     yield { type: 'done', result: [...messages, ...finalMessages] };
   } catch (e: unknown) {
-    yield { type: 'error', error: e instanceof Error ? e.message : String(e) };
+    yield { type: 'error', error: formatAgentError(e) };
   }
 }
