@@ -42,6 +42,8 @@
     "dev": "tsx watch src/cli/bin.tsx",
     "start": "tsx src/cli/bin.tsx",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "publishConfig": {
@@ -65,7 +67,8 @@
     "@types/react": "^19.2.14",
     "tsup": "^8.5.1",
     "tsx": "^4.19.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.8"
   },
   "volta": {
     "node": "24.6.0"
