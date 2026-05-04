@@ -52,9 +52,11 @@ codemap · 247 files · 38 dirs · 285/285 summarized · 142 KB indexed
   which unlinks .bonfire/sessions/<id>.json after verifying it exists.
 ```
 
-**Three tool calls. Zero greps.** Even on a 50K-file repo. The cache invalidates per-file on `mtime` so it stays current as you edit. No embeddings, no vector DB, no daemon, no cloud round-trips.
+**Three tool calls. Zero greps.** The cache invalidates per-file on `mtime` so it stays current as you edit. Directory summaries auto-invalidate when any descendant file is modified after the summary was written. No embeddings, no vector DB, no daemon, no cloud round-trips.
 
-The first build does read every file — but you only run it once per repo, the result is cached on disk, and `/codemap rebuild` is the only way to redo it.
+`.gitignore` is honoured with full glob semantics (`*.log`, `**/generated/**`, `!keep.log`, anchored `/root-only`). Symlinks are skipped to avoid cycles and out-of-repo escapes.
+
+The first build does read every file — but you only run it once per repo, the result is cached on disk, and `/codemap rebuild` is the only way to redo it. The build checkpoints to disk every 25 summaries, so a crash mid-pass picks up where it left off. A failed summary leaves the node un-summarized so the next build retries it instead of caching a fake. Works comfortably on repos with thousands of files; very large monorepos (tens of thousands) will benefit from running `/codemap build` over a coffee break or bumping `codemap.concurrency` if you're driving a remote API.
 
 ### Sessions — pick up tomorrow where you left off
 
@@ -169,12 +171,12 @@ Or configure manually in your config file (see below).
 
 ### Config Location
 
-Configuration is stored in your OS config directory:
+Configuration lives in a single file in your OS config directory:
 
 - **Linux/macOS**: `~/.config/bonfire/config.json`
 - **Windows**: `%APPDATA%/bonfire/config.json`
 
-This means the config travels with you — you don't need a `bonfire.config.json` in every project.
+The config travels with you — there's no per-project config file to maintain.
 
 ### Quick Reconfigure
 
@@ -199,14 +201,14 @@ This opens an interactive TUI to change:
 
 ### Full Config File
 
-Drop a `bonfire.config.json` in your config directory. Everything is optional.
+Edit `config.json` at the path above directly, or use `/reconfigure` for the interactive flow. Everything is optional.
 
 ```json
 {
   "provider": {
     "active": "remote",
     "ollama": {
-      "baseURL": "http://localhost:11434/api",
+      "baseURL": "http://127.0.0.1:11434/api",
       "model": "qwen3.6:latest"
     },
     "llama.cpp": {
@@ -216,7 +218,8 @@ Drop a `bonfire.config.json` in your config directory. Everything is optional.
     "remote": {
       "baseURL": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
-      "apiKey": ""
+      "apiKey": "",
+      "headers": { "X-Trace": "${TRACE_ID}" }
     }
   },
 
@@ -227,9 +230,14 @@ Drop a `bonfire.config.json` in your config directory. Everything is optional.
     "shell": {
       "requireApproval": true,
       "allowedCommands": ["^git status$", "^npm test$"],
-      "deniedCommands": ["^curl\\s"]
+      "deniedCommands": ["^curl\\s"],
+      "timeoutMs": 60000
     },
     "mcpRequireApproval": false
+  },
+
+  "codemap": {
+    "concurrency": 3
   },
 
   "mcpServers": {
@@ -241,13 +249,15 @@ Drop a `bonfire.config.json` in your config directory. Everything is optional.
 }
 ```
 
+`${ENV_VAR}` references inside any provider field, MCP env, or MCP headers are expanded at startup. Bump `codemap.concurrency` if you're driving a fast remote API — a local Ollama is fine at the default 3.
+
 ### Environment Variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `BONFIRE_PROVIDER` | `ollama` | `ollama`, `llama.cpp`, or `remote` |
 | `BONFIRE_MODEL` | provider-specific | Model id (Ollama tag, or label for llama.cpp) |
-| `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama host |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/api` | Ollama host |
 | `LLAMACPP_BASE_URL` | `http://127.0.0.1:8080/v1` | `llama-server` endpoint |
 | `LLAMACPP_API_KEY` | — | Optional bearer token |
 | `REMOTE_BASE_URL` | `https://api.openai.com/v1` | Remote API endpoint |
@@ -298,11 +308,13 @@ To add a new endpoint:
 
 At startup bonfire scans both skill directories and tells the model: *"these skills exist, here's their description, call `load_skill(name)` if a request matches."* The body only enters the context when the model asks for it — so you can ship 50 skills without bloating every prompt.
 
-```bash
-bonfire /init           # scaffolds .bonfire/system.md + .bonfire/skills/example.md
-bonfire /skills         # list available skills
-bonfire /skills show api-endpoint   # print a skill's body
-bonfire /skills reload  # re-scan after editing
+Type these inside the bonfire TUI:
+
+```
+/init                          scaffold .bonfire/system.md + .bonfire/skills/example.md
+/skills                        list available skills
+/skills show api-endpoint      print a skill's body
+/skills reload                 re-scan after editing
 ```
 
 ---
@@ -322,9 +334,9 @@ bonfire /skills reload  # re-scan after editing
 | `/codemap rebuild` | Wipe cache and re-summarize from scratch |
 | `/sessions` | List saved sessions |
 | `/sessions new` | Start a fresh conversation |
-| `/sessions load <id>` | Resume by hex ID |
+| `/sessions load <id>` | Resume a session — full ID or any unique prefix |
 | `/sessions save` | Force-save the active session |
-| `/sessions delete <id>` | Remove a session |
+| `/sessions delete <id>` | Remove a session — full ID or any unique prefix |
 | `/dirs` | Show the filesystem allowlist |
 | `/add-dir <path>` | Grant access to a sibling project |
 | `/config` | Show current configuration |
@@ -343,7 +355,9 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 
 **Streaming everything.** Text and tool arguments stream as they're generated. No 30-second blank stares.
 
-**Multiline prompts.** `Shift+Enter` (or `Alt+Enter`, or `Ctrl+J`) inserts a newline. Plain Enter submits. Pasting a multi-line block Just Works.
+**Multiline prompts.** `Shift+Enter` (modern terminals — kitty, Ghostty, WezTerm, recent iTerm2), `Alt+Enter`, or `Ctrl+J` inserts a newline. Plain Enter submits.
+
+**Smart paste.** Bracketed paste mode is enabled at startup, so multi-line pastes never submit mid-block. A *huge* paste — multi-line, or longer than ~200 chars — is redacted in the input as `[Pasted #1 (35 lines, 1234 chars)]` rather than flooding the prompt with the literal content. The real text is held aside and substituted back in when you hit Enter.
 
 **MCP-native.** Plug in any [Model Context Protocol](https://modelcontextprotocol.io) server — stdio or Streamable HTTP. Each server's tools land namespaced as `<server>__<tool>`.
 
@@ -355,7 +369,7 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 
 **Filesystem allowlist.** All file tools refuse paths outside the allowed set. Symlinks inside an allowed dir can't escape it (realpath-checked). `/add-dir <path>` to extend.
 
-**Lightweight.** A single Node CLI, ~100 KB on npm. No Docker, no Electron, no daemons.
+**Lightweight.** A single minified Node CLI bundle (~65 KB). No Docker, no Electron, no daemons. Runtime deps are installed by npm alongside it.
 
 ---
 
@@ -425,17 +439,18 @@ For llama.cpp, tool calling requires `llama-server --jinja`.
 
 ## Roadmap
 
-- [x] Codemap navigation
-- [x] Session persistence
+- [x] Codemap navigation (BFS walk, real `.gitignore` globs, symlink-safe)
+- [x] Session persistence + prefix lookup
 - [x] Slash-command autocomplete
-- [x] Multiline input (Shift+Enter)
-- [x] Shell approval + hardcoded deny-list
+- [x] Multiline input (Shift+Enter on modern terminals; Alt+Enter / Ctrl+J everywhere) + paste redaction
+- [x] Shell approval + hardcoded deny-list + configurable timeout
 - [x] Skills support — drop-in `~/.bonfire/skills/<name>.md`
 - [x] Configurable system prompt — `~/.bonfire/system.md` + project override
 - [x] OS config directory (not project-level)
-- [x] Interactive reconfigure TUI (`/reconfigure`)
+- [x] Interactive reconfigure TUI (`/reconfigure`) handling first-run + remote provider
 - [x] Remote provider (any OpenAI-compatible API)
-- [x] Custom headers support
+- [x] Custom headers + `${ENV}` expansion across provider config
+- [x] Configurable codemap concurrency + mid-build checkpointing
 - [ ] Editable diffs (`y` / `n` / `e` opens the patch in `$EDITOR`)
 - [ ] Side-by-side model race mode
 - [ ] Local RAG tool via a small embedding model
@@ -456,6 +471,7 @@ src/
     provider.ts        # lazy provider, debug fetch with header redaction
     stream.ts          # typed normalizer for AI SDK fullStream events
     system-prompt.ts   # 3-layer prompt: built-in + ~/.bonfire + .bonfire/system.md
+    error-format.ts    # single source of truth for provider error messages
   tools/
     safe-path.ts       # realpath-aware allowlist (closes symlink escapes)
     approval.ts        # tri-state yes/no/always handler
@@ -469,19 +485,22 @@ src/
     loader.ts          # scans ~/.bonfire/skills + .bonfire/skills, parses frontmatter
     tool.ts            # load_skill tool — model calls this on demand
   codemap/
-    walk.ts, summarize.ts, store.ts, index.ts, ignore.ts, types.ts
+    walk.ts            # iterative BFS, lstat-based, builds skeleton tree
+    summarize.ts       # bottom-up LLM pass, retry-on-fail, per-ext sampling
+    store.ts           # JSON cache + in-process memoization
+    ignore.ts          # gitignore-pkg-backed matcher + curated defaults
+    index.ts, types.ts
   providers/
     index.ts, ollama.ts, llamacpp.ts, remote.ts, types.ts
   cli/
-    bin.tsx            # entry: TTY check, MCP boot, render <App/>, signals
-    App.tsx            # layout-only composition
+    bin.tsx            # entry: TTY check, MCP boot, render <App firstRun=…/>, signals
+    App.tsx            # layout + first-run hand-off into <ReconfigurePrompt/>
     components/        # Header, Transcript, DiffPreview, ApprovalPrompt,
                        # ModifiedFilesPanel, UsageBar, MultilineInput,
                        # CommandSuggestions, ToolsPane, PromptBar,
-                       # ReconfigurePrompt
+                       # ReconfigurePrompt (handles both first-run + /reconfigure)
     hooks/             # useAgentStream, useApproval, useProvider, useThinkingPhrase
     commands/          # slash-command registry
-    onboarding.ts      # first-run setup wizard
 ```
 
 ---
