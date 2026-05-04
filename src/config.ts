@@ -110,6 +110,8 @@ export interface ShellSecurityConfig {
   deniedCommands?: string[];
   /** Set true to require approval for every shell call (default: true). */
   requireApproval?: boolean;
+  /** Timeout for a single shell invocation, in milliseconds (default: 60000). */
+  timeoutMs?: number;
 }
 
 export interface SecurityConfig {

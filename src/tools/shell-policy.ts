@@ -20,7 +20,10 @@ export interface ShellPolicy {
   allowedPatterns: RegExp[];
   deniedPatterns: RegExp[];
   requireApproval: boolean;
+  timeoutMs: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 let cached: ShellPolicy | null = null;
 
@@ -42,12 +45,20 @@ export async function getShellPolicy(): Promise<ShellPolicy> {
   if (cached) return cached;
   const cfg = await loadConfig();
   const sh = cfg.security?.shell ?? {};
+  const timeoutMs =
+    typeof sh.timeoutMs === 'number' && sh.timeoutMs > 0 ? sh.timeoutMs : DEFAULT_TIMEOUT_MS;
   cached = {
     allowedPatterns: compile(sh.allowedCommands),
     deniedPatterns: [...HARD_DENY, ...compile(sh.deniedCommands)],
     requireApproval: sh.requireApproval ?? true,
+    timeoutMs,
   };
   return cached;
+}
+
+/** Reset the in-memory cache. Used by tests and after /reconfigure. */
+export function resetShellPolicyCache() {
+  cached = null;
 }
 
 /** In-session pre-approvals — the user picked "always" for this exact command. */

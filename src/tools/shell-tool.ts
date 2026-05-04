@@ -44,7 +44,7 @@ export const shellTool = tool({
       const { stdout, stderr, exitCode } = await execa(command, {
         shell: true,
         cwd: getCwd(),
-        timeout: 60_000,
+        timeout: policy.timeoutMs,
         reject: false,
       });
       return {
