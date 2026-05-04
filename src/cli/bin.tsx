@@ -30,9 +30,23 @@ async function configExists(): Promise<boolean> {
 
 const firstRun = !(await configExists());
 
-const app = render(<App firstRun={firstRun} />);
+// Enable the Kitty keyboard protocol via `mode: 'enabled'` (a push, not a
+// probe). Modern terminals (kitty, Ghostty, WezTerm, recent iTerm2) honour
+// the set command and start sending CSI-u sequences for Shift+Enter; older
+// terminals silently ignore the unknown CSI sequence. Crucially, there is no
+// query — so nothing can leak as visible output the way `mode: 'auto'` does.
+const app = render(<App firstRun={firstRun} />, {
+  kittyKeyboard: { mode: 'enabled', flags: ['disambiguateEscapeCodes'] },
+});
+
+// Enable bracketed paste mode so the terminal wraps pasted text in markers
+// (Ink's input parser already understands them). Without this, a pasted block
+// containing newlines is delivered as a stream of keypresses and the embedded
+// \r submits the prompt mid-paste.
+process.stdout.write('\x1b[?2004h');
 
 const cleanup = async () => {
+  process.stdout.write('\x1b[?2004l');
   app.unmount();
   process.stdout.write('\x1b[2J\x1b[0f');
   await shutdownMcp();

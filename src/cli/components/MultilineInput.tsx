@@ -1,5 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+
+/** Anything below this gets inserted verbatim; above it, redacted to a placeholder. */
+const PASTE_REDACT_THRESHOLD = 200;
+const PLACEHOLDER_RE = /\[Pasted #(\d+) \([^)]+\)\]/g;
+
+interface PasteRecord {
+  id: number;
+  content: string;
+  lines: number;
+  chars: number;
+}
+
+function makePlaceholderLabel(rec: PasteRecord): string {
+  const stat =
+    rec.lines === 1
+      ? `${rec.chars} chars`
+      : `${rec.lines} lines, ${rec.chars} chars`;
+  return `[Pasted #${rec.id} (${stat})]`;
+}
 
 interface MultilineInputProps {
   value: string;
@@ -32,17 +51,20 @@ export interface KeyMeta {
  *
  * Keybindings:
  *   Enter           submit
- *   Shift+Enter     newline    (terminals that send \r\n on shift-enter)
- *   Alt+Enter       newline    (most terminals — works without xterm bracketed-paste hack)
- *   Ctrl+J          newline    (universal fallback)
+ *   Shift+Enter     newline    (modern terminals — Kitty keyboard protocol)
+ *   Alt+Enter       newline    (works in iTerm2 / WezTerm / Ghostty / Apple Terminal)
+ *   Ctrl+J          newline    (universal fallback — works everywhere)
  *   ←/→             move cursor in line
  *   ↑/↓             move cursor between lines
  *   Backspace       delete left
  *   Ctrl+A / Ctrl+E start / end of line
  *   Ctrl+U          delete to start of line
  *
- * Pasted bursts come through `useInput` as a single chunk including newlines —
- * we honour any \n in the chunk verbatim, so multi-line paste just works.
+ * Multi-line paste relies on bracketed paste mode (enabled in bin.tsx). When a
+ * paste is multi-line or longer than PASTE_REDACT_THRESHOLD, the displayed
+ * value gets a placeholder like `[Pasted #1 (35 lines, 1234 chars)]` while the
+ * real content is held in a side-map. On submit the placeholders are expanded
+ * back to the original text before invoking onSubmit.
  */
 export function MultilineInput({
   value,
@@ -59,28 +81,77 @@ export function MultilineInput({
   if (cursor > value.length) setCursor(value.length);
   else if (value.length > cursor) setCursor(value.length);
 
+  const pastesRef = useRef<Map<number, PasteRecord>>(new Map());
+  const nextPasteIdRef = useRef(1);
+
+  // Wipe paste storage when the parent fully clears the input (after submit
+  // or a manual reset). Numbering restarts at #1 each round.
+  useEffect(() => {
+    if (value === '') {
+      pastesRef.current.clear();
+      nextPasteIdRef.current = 1;
+    }
+  }, [value]);
+
+  const insertAtCursor = (text: string) => {
+    if (!text) return;
+    const next = value.slice(0, cursor) + text + value.slice(cursor);
+    onChange(next);
+    setCursor(cursor + text.length);
+  };
+
+  const insertPastePlaceholder = (raw: string) => {
+    const id = nextPasteIdRef.current++;
+    const rec: PasteRecord = {
+      id,
+      content: raw,
+      lines: raw.split('\n').length,
+      chars: raw.length,
+    };
+    pastesRef.current.set(id, rec);
+    insertAtCursor(makePlaceholderLabel(rec));
+  };
+
+  const expandPlaceholders = (text: string): string => {
+    return text.replace(PLACEHOLDER_RE, (match, idStr: string) => {
+      const rec = pastesRef.current.get(Number(idStr));
+      return rec ? rec.content : match;
+    });
+  };
+
   useInput((input, key) => {
     if (disabled) return;
 
     if (onKey?.(input, key as KeyMeta)) return;
 
+    // Multi-character input arrives as a single chunk when bracketed paste
+    // mode is on, or for any sufficiently fast typing burst. Decide between
+    // verbatim insert and redacted placeholder based on size + line count.
+    if (input.length > 1 && !key.ctrl && !key.meta) {
+      const normalized = input.replace(/\r\n?/g, '\n');
+      const isHugePaste =
+        normalized.includes('\n') || normalized.length > PASTE_REDACT_THRESHOLD;
+      if (isHugePaste) {
+        insertPastePlaceholder(normalized);
+      } else {
+        insertAtCursor(normalized);
+      }
+      return;
+    }
+
     // Submit vs newline. Shift+Enter, Alt+Enter, Ctrl+J → newline. Plain Enter → submit.
     if (key.return) {
       const isNewline = key.shift || key.meta || (key.ctrl && input === '\n');
       if (isNewline) {
-        const next = value.slice(0, cursor) + '\n' + value.slice(cursor);
-        onChange(next);
-        setCursor(cursor + 1);
+        insertAtCursor('\n');
         return;
       }
-      onSubmit(value);
+      onSubmit(expandPlaceholders(value));
       return;
     }
 
     if (key.ctrl && input === 'j') {
-      const next = value.slice(0, cursor) + '\n' + value.slice(cursor);
-      onChange(next);
-      setCursor(cursor + 1);
+      insertAtCursor('\n');
       return;
     }
 
