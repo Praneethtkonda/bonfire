@@ -1,9 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import ignore, { type Ignore } from 'ignore';
 
-// Default ignore patterns — directory names, file basenames, and extensions.
-// Kept conservative: noise directories + lockfiles + binary assets.
-const IGNORED_DIRS = new Set([
+/**
+ * Curated directories we always skip — build artifacts, cache dirs, vendor
+ * dirs, the repo's own state. Patterns are written as gitignore lines so they
+ * match at any depth (e.g. nested `node_modules/`).
+ */
+const IGNORED_DIRS = [
   'node_modules',
   '.git',
   '.hg',
@@ -27,12 +31,10 @@ const IGNORED_DIRS = new Set([
   '.ruff_cache',
   '.tox',
   '.idea',
-  '.vscode',
-  '.DS_Store',
-  '.nano',
-]);
+  '.bonfire',
+] as const;
 
-const IGNORED_FILE_BASENAMES = new Set([
+const IGNORED_FILE_BASENAMES = [
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
@@ -43,7 +45,7 @@ const IGNORED_FILE_BASENAMES = new Set([
   'composer.lock',
   'Gemfile.lock',
   '.DS_Store',
-]);
+] as const;
 
 const BINARY_EXTENSIONS = new Set([
   // images
@@ -63,67 +65,44 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 export interface IgnoreRules {
-  /** Exact basenames of dirs to skip. */
-  dirs: Set<string>;
-  /** Exact basenames of files to skip. */
-  files: Set<string>;
-  /** Lower-case extensions (incl. dot) to treat as binary/skip. */
+  /** Combined gitignore-style matcher: curated defaults + project .gitignore. */
+  matcher: Ignore;
+  /** Lower-case extensions (incl. dot) treated as binary regardless of gitignore. */
   binaryExts: Set<string>;
-  /** Simple glob-ish patterns from .gitignore (basename matches only, for prototype). */
-  gitignorePatterns: string[];
 }
 
 export async function loadIgnoreRules(root: string): Promise<IgnoreRules> {
-  const gitignorePatterns = await readGitignore(root);
-  return {
-    dirs: IGNORED_DIRS,
-    files: IGNORED_FILE_BASENAMES,
-    binaryExts: BINARY_EXTENSIONS,
-    gitignorePatterns,
-  };
-}
+  const matcher = ignore();
+  // Curated defaults — patterns are bare names, so they match at any depth.
+  matcher.add(IGNORED_DIRS.map((d) => `${d}/`));
+  matcher.add([...IGNORED_FILE_BASENAMES]);
 
-async function readGitignore(root: string): Promise<string[]> {
+  // Project-level .gitignore. We don't recurse into nested .gitignore files;
+  // root coverage is enough for the 95% case and keeps the matcher simple.
   try {
     const raw = await readFile(resolve(root, '.gitignore'), 'utf-8');
-    return raw
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith('#'));
+    matcher.add(raw);
   } catch {
-    return [];
+    // No .gitignore — fall back to curated defaults only.
   }
+
+  return { matcher, binaryExts: BINARY_EXTENSIONS };
 }
 
-/**
- * Cheap basename-oriented match against .gitignore lines.
- * Full glob semantics are out of scope for the prototype — the default
- * directory/extension lists already cover the 90% case. We just check
- * plain-name and `name/` patterns as an extra safety net.
- */
-export function matchesGitignoreBasename(name: string, patterns: string[]): boolean {
-  for (const p of patterns) {
-    const stripped = p.replace(/^\/+/, '').replace(/\/+$/, '');
-    if (!stripped || stripped.includes('/') || stripped.includes('*')) continue;
-    if (stripped === name) return true;
-  }
-  return false;
+/** True if the given relative directory path should be skipped during walk. */
+export function isIgnoredDir(relPath: string, rules: IgnoreRules): boolean {
+  if (!relPath) return false;
+  // Trailing slash makes the matcher treat the path as a directory.
+  return rules.matcher.ignores(`${relPath}/`);
 }
 
-export function isIgnoredDir(name: string, rules: IgnoreRules): boolean {
-  if (rules.dirs.has(name)) return true;
-  if (name.startsWith('.') && name !== '.') {
-    // hidden dirs are skipped by default except explicitly allowed ones
-    return true;
-  }
-  return matchesGitignoreBasename(name, rules.gitignorePatterns);
-}
-
-export function isIgnoredFile(name: string, rules: IgnoreRules): boolean {
-  if (rules.files.has(name)) return true;
-  const lower = name.toLowerCase();
+/** True if the given relative file path should be skipped during walk. */
+export function isIgnoredFile(relPath: string, rules: IgnoreRules): boolean {
+  if (!relPath) return false;
+  if (rules.matcher.ignores(relPath)) return true;
+  const lower = relPath.toLowerCase();
   for (const ext of rules.binaryExts) {
     if (lower.endsWith(ext)) return true;
   }
-  return matchesGitignoreBasename(name, rules.gitignorePatterns);
+  return false;
 }

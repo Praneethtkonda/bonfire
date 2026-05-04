@@ -16,6 +16,13 @@ export interface CodemapNode {
    * Present only after a codemap build pass.
    */
   summary?: string;
+  /** ms-since-epoch when `summary` was last written; used for staleness checks. */
+  summarizedAt?: number;
+  /**
+   * ms-since-epoch when the last summarization attempt failed. Set instead of
+   * caching a fake summary, so the next build retries this node.
+   */
+  summaryFailedAt?: number;
   /** Children for dirs; empty/undefined for files. */
   children?: CodemapNode[];
   /** File size in bytes (files only). */

@@ -1,10 +1,11 @@
-import { loadCodemap, saveCodemap } from './store.js';
+import { invalidateCodemapCache, loadCodemap, saveCodemap } from './store.js';
 import { summarizeCodemap, type SummarizeOptions } from './summarize.js';
 import type { Codemap, CodemapNode, CodemapStats } from './types.js';
 import { statsFor, walkRepo } from './walk.js';
 
 export type { Codemap, CodemapNode, CodemapStats } from './types.js';
 export { statsFor } from './walk.js';
+export { invalidateCodemapCache } from './store.js';
 
 /**
  * Load the cached codemap, or walk the repo to build a skeleton map if nothing
@@ -40,6 +41,7 @@ export async function buildSummaries(
 
 /** Force a full fresh walk and throw away any cached summaries. */
 export async function rebuildCodemap(root: string): Promise<Codemap> {
+  invalidateCodemapCache(root);
   const fresh = await walkRepo({ root });
   await saveCodemap(root, fresh);
   return fresh;

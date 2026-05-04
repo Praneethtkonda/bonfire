@@ -120,6 +120,11 @@ export interface SecurityConfig {
   mcpRequireApproval?: boolean;
 }
 
+export interface CodemapConfig {
+  /** Max concurrent LLM calls during a /codemap build. Default: 3. */
+  concurrency?: number;
+}
+
 export interface NanoConfig {
   provider?: ProviderConfig;
   mcpServers?: Record<string, McpServerConfig>;
@@ -128,6 +133,7 @@ export interface NanoConfig {
   /** 'append' (default) keeps the built-in prompt; 'replace' substitutes it entirely. */
   systemPromptMode?: 'append' | 'replace';
   security?: SecurityConfig;
+  codemap?: CodemapConfig;
 }
 
 let cached: NanoConfig | null = null;

@@ -1,10 +1,10 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
-import { extname, relative, resolve } from 'node:path';
-import { isIgnoredDir, isIgnoredFile, loadIgnoreRules, type IgnoreRules } from './ignore.js';
+import { lstat, readdir, readFile } from 'node:fs/promises';
+import { extname, resolve } from 'node:path';
+import { isIgnoredDir, isIgnoredFile, loadIgnoreRules } from './ignore.js';
 import type { Codemap, CodemapNode, CodemapStats } from './types.js';
 
-const MAX_READ_BYTES = 64_000;          // only read the top of a file for skeleton extraction
-const LARGE_FILE_THRESHOLD = 500_000;   // files bigger than this get a size-only skeleton
+const MAX_READ_BYTES = 64_000;          // skeleton head budget per file
+const LARGE_FILE_THRESHOLD = 500_000;   // export-extraction cutoff; LLM still summarizes head
 
 const LANG_BY_EXT: Record<string, string> = {
   '.ts': 'TS', '.tsx': 'TSX', '.js': 'JS', '.jsx': 'JSX', '.mjs': 'JS', '.cjs': 'JS',
@@ -20,16 +20,80 @@ const LANG_BY_EXT: Record<string, string> = {
 export interface WalkOptions {
   root: string;
   /**
-   * If a prior codemap exists, nodes whose mtime + size match are reused — we
-   * keep both the skeleton and any LLM summary instead of re-reading the file.
+   * Reuse skeletons + summaries from a prior codemap whenever a node's
+   * mtime+size still match. Symlinks are skipped entirely.
    */
   previous?: Codemap | null;
 }
 
+interface QueueEntry {
+  relPath: string;
+  abs: string;
+  node: CodemapNode;
+}
+
+/**
+ * Iteratively walk the repo breadth-first. Builds the tree top-down: each dir
+ * node is created when popped from the queue and its children are attached as
+ * they get visited. Once the queue empties, a single post-pass fixes up dir
+ * skeletons and propagates cached summaries (clearing any whose subtree has
+ * changed since they were summarized).
+ */
 export async function walkRepo(options: WalkOptions): Promise<Codemap> {
   const rules = await loadIgnoreRules(options.root);
-  const prevIndex = options.previous ? buildPrevIndex(options.previous.tree) : new Map<string, CodemapNode>();
-  const tree = await walkNode('', options.root, rules, prevIndex);
+  const prevIndex = options.previous
+    ? buildPrevIndex(options.previous.tree)
+    : new Map<string, CodemapNode>();
+
+  const tree: CodemapNode = {
+    path: '',
+    name: '.',
+    kind: 'dir',
+    skeleton: '',
+    children: [],
+  };
+
+  const queue: QueueEntry[] = [{ relPath: '', abs: options.root, node: tree }];
+  let head = 0;
+  while (head < queue.length) {
+    const { relPath, abs, node } = queue[head++];
+    let entries: string[];
+    try {
+      entries = await readdir(abs);
+    } catch {
+      continue;
+    }
+    for (const name of entries.sort()) {
+      const childAbs = resolve(abs, name);
+      let s;
+      try {
+        s = await lstat(childAbs);
+      } catch {
+        continue;
+      }
+      if (s.isSymbolicLink()) continue; // never follow — avoids cycles + escapes
+      const childRel = relPath === '' ? name : `${relPath}/${name}`;
+      if (s.isDirectory()) {
+        if (isIgnoredDir(childRel, rules)) continue;
+        const child: CodemapNode = {
+          path: childRel,
+          name,
+          kind: 'dir',
+          skeleton: '',
+          children: [],
+        };
+        node.children!.push(child);
+        queue.push({ relPath: childRel, abs: childAbs, node: child });
+      } else if (s.isFile()) {
+        if (isIgnoredFile(childRel, rules)) continue;
+        const child = await visitFile(childRel, childAbs, s.mtimeMs, s.size, prevIndex);
+        node.children!.push(child);
+      }
+    }
+  }
+
+  postProcessTree(tree, prevIndex);
+
   return {
     version: 1,
     root: options.root,
@@ -39,54 +103,13 @@ export async function walkRepo(options: WalkOptions): Promise<Codemap> {
   };
 }
 
-function buildPrevIndex(node: CodemapNode, into = new Map<string, CodemapNode>()): Map<string, CodemapNode> {
+function buildPrevIndex(
+  node: CodemapNode,
+  into = new Map<string, CodemapNode>(),
+): Map<string, CodemapNode> {
   into.set(node.path, node);
   for (const child of node.children ?? []) buildPrevIndex(child, into);
   return into;
-}
-
-async function walkNode(
-  relPath: string,
-  abs: string,
-  rules: IgnoreRules,
-  prev: Map<string, CodemapNode>,
-): Promise<CodemapNode> {
-  const name = relPath === '' ? '.' : relPath.split('/').pop()!;
-  let entries: string[] = [];
-  try {
-    entries = await readdir(abs);
-  } catch {
-    entries = [];
-  }
-
-  const children: CodemapNode[] = [];
-  for (const entry of entries.sort()) {
-    const childAbs = resolve(abs, entry);
-    let s;
-    try {
-      s = await stat(childAbs);
-    } catch {
-      continue;
-    }
-    const childRel = relPath === '' ? entry : `${relPath}/${entry}`;
-    if (s.isDirectory()) {
-      if (isIgnoredDir(entry, rules)) continue;
-      children.push(await walkNode(childRel, childAbs, rules, prev));
-    } else if (s.isFile()) {
-      if (isIgnoredFile(entry, rules)) continue;
-      children.push(await visitFile(childRel, childAbs, s.mtimeMs, s.size, prev));
-    }
-  }
-
-  return {
-    path: relPath,
-    name,
-    kind: 'dir',
-    skeleton: skeletonForDir(children),
-    // Roll forward a cached dir summary if children are structurally unchanged.
-    summary: inheritDirSummary(relPath, children, prev),
-    children,
-  };
 }
 
 async function visitFile(
@@ -103,24 +126,19 @@ async function visitFile(
 
   const name = relPath.split('/').pop()!;
   if (size > LARGE_FILE_THRESHOLD) {
+    // Big files keep a size-only skeleton (no export extraction), but the
+    // summarize pass will still try to write a summary from the head bytes.
     return {
       path: relPath,
       name,
       kind: 'file',
-      skeleton: `${langFromName(name)} · ${(size / 1024).toFixed(0)} KB (large, skipped)`,
+      skeleton: `${langFromName(name)} · ${(size / 1024).toFixed(0)} KB (large)`,
       size,
       mtime,
     };
   }
 
-  let head = '';
-  try {
-    const buf = await readFile(abs);
-    head = buf.subarray(0, MAX_READ_BYTES).toString('utf-8');
-  } catch {
-    head = '';
-  }
-
+  const head = await readHead(abs, MAX_READ_BYTES);
   return {
     path: relPath,
     name,
@@ -131,18 +149,57 @@ async function visitFile(
   };
 }
 
-function inheritDirSummary(
-  relPath: string,
-  children: CodemapNode[],
-  prev: Map<string, CodemapNode>,
-): string | undefined {
-  const cached = prev.get(relPath);
-  if (!cached || cached.kind !== 'dir' || !cached.summary) return undefined;
-  const prevChildNames = new Set((cached.children ?? []).map((c) => c.name));
-  const nextChildNames = new Set(children.map((c) => c.name));
-  if (prevChildNames.size !== nextChildNames.size) return undefined;
-  for (const n of nextChildNames) if (!prevChildNames.has(n)) return undefined;
-  return cached.summary;
+/**
+ * Read up to `maxBytes` of `abs` and decode as UTF-8 with stream:true so any
+ * trailing partial codepoint is dropped instead of becoming U+FFFD.
+ */
+async function readHead(abs: string, maxBytes: number): Promise<string> {
+  try {
+    const buf = await readFile(abs);
+    const slice = buf.subarray(0, maxBytes);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    return decoder.decode(slice, { stream: true });
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Bottom-up post-pass: recompute every dir's skeleton from its actual children
+ * and decide whether to keep the dir's cached summary. The cached summary is
+ * preserved only if the structural shape (child names) is unchanged AND no
+ * descendant file has been modified since the summary was written.
+ */
+function postProcessTree(root: CodemapNode, prev: Map<string, CodemapNode>): void {
+  function visit(node: CodemapNode): number {
+    if (node.kind === 'file') return node.mtime ?? 0;
+    let maxDescendantMtime = 0;
+    for (const c of node.children ?? []) {
+      maxDescendantMtime = Math.max(maxDescendantMtime, visit(c));
+    }
+    node.skeleton = skeletonForDir(node.children ?? []);
+
+    const cached = prev.get(node.path);
+    if (
+      cached?.kind === 'dir' &&
+      cached.summary &&
+      typeof cached.summarizedAt === 'number' &&
+      sameChildNames(cached.children ?? [], node.children ?? []) &&
+      maxDescendantMtime <= cached.summarizedAt
+    ) {
+      node.summary = cached.summary;
+      node.summarizedAt = cached.summarizedAt;
+    }
+    return maxDescendantMtime;
+  }
+  visit(root);
+}
+
+function sameChildNames(a: CodemapNode[], b: CodemapNode[]): boolean {
+  if (a.length !== b.length) return false;
+  const seen = new Set(a.map((n) => n.name));
+  for (const n of b) if (!seen.has(n.name)) return false;
+  return true;
 }
 
 function langFromName(name: string): string {

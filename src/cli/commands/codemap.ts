@@ -35,7 +35,6 @@ export const codemapCommand: SlashCommand = {
         if (sub === 'rebuild') await rebuildCodemap(ctx.cwd);
         ctx.setCodemapProgress({ done: 0, total: 0, path: 'starting' });
         const map = await buildSummaries(ctx.cwd, {
-          concurrency: 3,
           force: sub === 'rebuild',
           onProgress: (done, total, path) =>
             ctx.setCodemapProgress({ done, total, path }),

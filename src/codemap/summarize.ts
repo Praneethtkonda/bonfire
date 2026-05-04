@@ -1,11 +1,14 @@
-import { generateText } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
+import { loadConfig } from '../config.js';
 import { resolveProvider } from '../providers/index.js';
+import { saveCodemap } from './store.js';
 import type { Codemap, CodemapNode } from './types.js';
 
-const MAX_FILE_CHARS = 8000;
+const MAX_FILE_BYTES = 8000;
 const MAX_DIR_CHILDREN_FOR_PROMPT = 40;
+const MAX_FILES_PER_EXT = 6;
 
 const FILE_SYSTEM_PROMPT = `You summarize source files for a code index.
 
@@ -30,17 +33,20 @@ Bad:  This directory contains 12 TypeScript files about authentication.
 Good: OAuth + JWT auth stack: token signing, session store, Google/GitHub providers.`;
 
 export interface SummarizeOptions {
-  /** Max concurrent LLM calls. Local models are slow; keep this small. */
-  concurrency?: number;
   /**
-   * Called whenever a node summary completes. Used by the TUI for a live
-   * "123 / 456 summarized" counter.
+   * Max concurrent LLM calls. Defaults to config.codemap.concurrency (which
+   * itself defaults to 3 if unset). Local models are slow; remote APIs can
+   * comfortably push 10-20.
    */
+  concurrency?: number;
+  /** Live "n / total summarized" callback for the TUI. */
   onProgress?: (done: number, total: number, path: string) => void;
   /** If true, re-summarize even nodes that already have a `summary`. */
   force?: boolean;
   /** Abort mid-pass. */
   signal?: AbortSignal;
+  /** Persist progress every N completed summaries (default: 25). 0 disables. */
+  checkpointEvery?: number;
 }
 
 export async function summarizeCodemap(
@@ -48,8 +54,13 @@ export async function summarizeCodemap(
   options: SummarizeOptions = {},
 ): Promise<Codemap> {
   const provider = await resolveProvider();
-  const concurrency = Math.max(1, options.concurrency ?? 3);
+  const cfg = await loadConfig();
+  const concurrency = Math.max(
+    1,
+    options.concurrency ?? cfg.codemap?.concurrency ?? 3,
+  );
   const force = options.force ?? false;
+  const checkpointEvery = options.checkpointEvery ?? 25;
 
   const files: CodemapNode[] = [];
   const dirs: CodemapNode[] = [];
@@ -58,54 +69,90 @@ export async function summarizeCodemap(
   const fileTargets = files.filter((n) => force || !n.summary);
   const total = fileTargets.length + dirs.length;
   let done = 0;
+  let sinceCheckpoint = 0;
+  let checkpointInFlight: Promise<void> | null = null;
+
+  const checkpoint = () => {
+    if (checkpointEvery <= 0 || checkpointInFlight) return;
+    checkpointInFlight = saveCodemap(map.root, map)
+      .catch((e) => {
+        if (process.env.BONFIRE_DEBUG === '1') {
+          console.error(`[codemap] checkpoint failed: ${(e as Error).message ?? e}`);
+        }
+      })
+      .finally(() => {
+        checkpointInFlight = null;
+      });
+  };
+
+  const recordProgress = (path: string) => {
+    done += 1;
+    sinceCheckpoint += 1;
+    options.onProgress?.(done, total, path);
+    if (checkpointEvery > 0 && sinceCheckpoint >= checkpointEvery) {
+      sinceCheckpoint = 0;
+      checkpoint();
+    }
+  };
 
   // Pass 1: files in parallel (bounded).
   await runBounded(fileTargets, concurrency, async (node) => {
     if (options.signal?.aborted) return;
     try {
       node.summary = await summarizeFile(provider.model, map.root, node);
-    } catch (e: any) {
-      node.summary = node.skeleton; // fall back so we don't re-query next time
+      node.summarizedAt = Date.now();
+      node.summaryFailedAt = undefined;
+    } catch (e: unknown) {
+      // Don't poison the cache. Leaving `summary` undefined makes the next
+      // build retry this node automatically.
+      node.summary = undefined;
+      node.summaryFailedAt = Date.now();
       if (process.env.BONFIRE_DEBUG === '1') {
-        console.error(`[codemap] summarize failed for ${node.path}: ${e.message ?? e}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[codemap] summarize failed for ${node.path}: ${msg}`);
       }
     }
-    done += 1;
-    options.onProgress?.(done, total, node.path);
+    recordProgress(node.path);
   });
 
-  // Pass 2: dirs bottom-up. Children must be summarized first for the roll-up to make sense.
+  // Pass 2: dirs bottom-up so children are summarized before their parent.
   const bottomUp = [...dirs].sort((a, b) => depth(b.path) - depth(a.path));
   for (const node of bottomUp) {
     if (options.signal?.aborted) break;
     if (!force && node.summary) {
-      done += 1;
-      options.onProgress?.(done, total, node.path);
+      recordProgress(node.path);
       continue;
     }
     try {
       node.summary = await summarizeDir(provider.model, node);
-    } catch (e: any) {
-      node.summary = node.skeleton;
+      node.summarizedAt = Date.now();
+      node.summaryFailedAt = undefined;
+    } catch (e: unknown) {
+      node.summary = undefined;
+      node.summaryFailedAt = Date.now();
       if (process.env.BONFIRE_DEBUG === '1') {
-        console.error(`[codemap] dir-summarize failed for ${node.path}: ${e.message ?? e}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[codemap] dir-summarize failed for ${node.path}: ${msg}`);
       }
     }
-    done += 1;
-    options.onProgress?.(done, total, node.path);
+    recordProgress(node.path);
   }
 
   map.summarizedAt = Date.now();
+  if (checkpointInFlight) await checkpointInFlight;
   return map;
 }
 
-async function summarizeFile(model: any, root: string, node: CodemapNode): Promise<string> {
+async function summarizeFile(
+  model: LanguageModel,
+  root: string,
+  node: CodemapNode,
+): Promise<string> {
   const abs = resolve(root, node.path);
-  let head = '';
-  try {
-    const buf = await readFile(abs);
-    head = buf.subarray(0, MAX_FILE_CHARS).toString('utf-8');
-  } catch {
+  const head = await readHead(abs, MAX_FILE_BYTES);
+  if (!head) {
+    // Couldn't read the file at all — leave the skeleton-derived label as the
+    // summary. This is rare (permissions errors).
     return node.skeleton;
   }
   const prompt = [
@@ -113,7 +160,7 @@ async function summarizeFile(model: any, root: string, node: CodemapNode): Promi
     `Skeleton: ${node.skeleton}`,
     '---',
     head,
-    head.length >= MAX_FILE_CHARS ? '...[truncated]' : '',
+    head.length >= MAX_FILE_BYTES ? '...[truncated]' : '',
   ].join('\n');
 
   const { text } = await generateText({
@@ -125,15 +172,88 @@ async function summarizeFile(model: any, root: string, node: CodemapNode): Promi
   return cleanOneLiner(text);
 }
 
-async function summarizeDir(model: any, node: CodemapNode): Promise<string> {
-  const children = (node.children ?? []).slice(0, MAX_DIR_CHILDREN_FOR_PROMPT);
-  const lines = children.map((c) => {
-    const marker = c.kind === 'dir' ? 'dir' : 'file';
-    return `- [${marker}] ${c.name} — ${c.summary ?? c.skeleton}`;
-  });
-  const overflow = (node.children?.length ?? 0) - children.length;
-  if (overflow > 0) lines.push(`- ...and ${overflow} more`);
+/**
+ * Decode up to `maxBytes` of the file as UTF-8 with `stream: true`, which
+ * drops any trailing partial codepoint instead of producing a U+FFFD.
+ */
+async function readHead(abs: string, maxBytes: number): Promise<string> {
+  try {
+    const buf = await readFile(abs);
+    const slice = buf.subarray(0, maxBytes);
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    return decoder.decode(slice, { stream: true });
+  } catch {
+    return '';
+  }
+}
 
+interface PickedChildren {
+  /** Child entries to render, with overflow lines appended at the end. */
+  lines: string[];
+}
+
+/**
+ * Pick a representative subset of a dir's children for the summarization
+ * prompt: include every subdirectory (always), then bucket files by extension
+ * and take the top `MAX_FILES_PER_EXT` per bucket sorted by size descending.
+ * The remainder is reported as an overflow line per extension so the model
+ * still knows what's there.
+ */
+function pickDirChildrenForPrompt(node: CodemapNode): PickedChildren {
+  const all = node.children ?? [];
+  const dirs = all.filter((c) => c.kind === 'dir');
+  const files = all.filter((c) => c.kind === 'file');
+
+  const filesByExt = new Map<string, CodemapNode[]>();
+  for (const f of files) {
+    const ext = extname(f.name).toLowerCase() || '(none)';
+    const bucket = filesByExt.get(ext) ?? [];
+    bucket.push(f);
+    filesByExt.set(ext, bucket);
+  }
+
+  const includedFiles: CodemapNode[] = [];
+  const overflow: Array<{ ext: string; count: number }> = [];
+  const sortedExts = [...filesByExt.entries()].sort(
+    (a, b) => b[1].length - a[1].length,
+  );
+  for (const [ext, bucket] of sortedExts) {
+    bucket.sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
+    includedFiles.push(...bucket.slice(0, MAX_FILES_PER_EXT));
+    if (bucket.length > MAX_FILES_PER_EXT) {
+      overflow.push({ ext, count: bucket.length - MAX_FILES_PER_EXT });
+    }
+  }
+
+  // Hard cap on rendered children. Always keep dirs, trim files first.
+  const total = dirs.length + includedFiles.length;
+  if (total > MAX_DIR_CHILDREN_FOR_PROMPT) {
+    const room = Math.max(0, MAX_DIR_CHILDREN_FOR_PROMPT - dirs.length);
+    const dropped = includedFiles.length - room;
+    includedFiles.length = room;
+    if (dropped > 0) overflow.push({ ext: 'misc', count: dropped });
+  }
+
+  const renderChild = (c: CodemapNode, marker: string) => {
+    let desc = c.summary ?? '';
+    if (!desc) {
+      desc = c.summaryFailedAt ? '(unsummarized)' : c.skeleton;
+    }
+    return `- [${marker}] ${c.name} — ${desc}`;
+  };
+
+  const lines: string[] = [];
+  for (const d of dirs) lines.push(renderChild(d, 'dir'));
+  for (const f of includedFiles) lines.push(renderChild(f, 'file'));
+  if (overflow.length) {
+    const ovStr = overflow.map((o) => `${o.count} more ${o.ext}`).join(', ');
+    lines.push(`- ...and ${ovStr}`);
+  }
+  return { lines };
+}
+
+async function summarizeDir(model: LanguageModel, node: CodemapNode): Promise<string> {
+  const { lines } = pickDirChildrenForPrompt(node);
   const prompt = [
     `Directory: ${node.path || '.'}`,
     'Children:',
@@ -192,3 +312,5 @@ function cleanOneLiner(text: string): string {
   if (t.length > 200) t = t.slice(0, 199) + '…';
   return t;
 }
+
+export { pickDirChildrenForPrompt };
