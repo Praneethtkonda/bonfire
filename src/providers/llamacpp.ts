@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { loadConfig } from '../config.js';
+import { loadConfig, expandEnv, expandEnvMap } from '../config.js';
 import type { ResolvedProvider } from './types.js';
 
 // llama.cpp's `llama-server` exposes an OpenAI-compatible API at /v1.
@@ -9,20 +9,26 @@ import type { ResolvedProvider } from './types.js';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1';
 const DEFAULT_MODEL = 'qwen3.6:latest';
 
+function expand(value: string | undefined, env: NodeJS.ProcessEnv): string | undefined {
+  return value === undefined ? undefined : expandEnv(value, env);
+}
+
 export async function createLlamaCppProvider(input: {
   env: NodeJS.ProcessEnv;
   fetchImpl: typeof fetch;
 }): Promise<ResolvedProvider> {
   const cfg = (await loadConfig()).provider?.['llama.cpp'] ?? {};
-  const baseURL = input.env.LLAMACPP_BASE_URL ?? cfg.baseURL ?? DEFAULT_BASE_URL;
-  const modelId = cfg.model ?? input.env.BONFIRE_MODEL ?? DEFAULT_MODEL;
-  const apiKey = input.env.LLAMACPP_API_KEY ?? cfg.apiKey;
+  const env = input.env;
+
+  const baseURL = env.LLAMACPP_BASE_URL ?? expand(cfg.baseURL, env) ?? DEFAULT_BASE_URL;
+  const modelId = expand(cfg.model, env) ?? env.BONFIRE_MODEL ?? DEFAULT_MODEL;
+  const apiKey = env.LLAMACPP_API_KEY ?? expand(cfg.apiKey, env);
 
   const sdk = createOpenAICompatible({
     name: 'llama.cpp',
     baseURL,
     apiKey,
-    headers: cfg.headers,
+    headers: expandEnvMap(cfg.headers, env),
     fetch: input.fetchImpl,
     includeUsage: true,
   });
