@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import type { Session } from '../session/index.js';
 import { listTools, type ToolDescriptor, resetProvider, describeProvider } from '../agent/index.js';
@@ -45,6 +45,13 @@ export function App({ firstRun = false }: AppProps) {
 
   const stream = useAgentStream({ cwd, currentSession, setCurrentSession });
   const thinkingPhrase = useThinkingPhrase(stream.busy, stream.activeTool?.name ?? null);
+  // Abort hook for long-running slash commands (e.g. /codemap build). The
+  // command registers its abort fn here; the Esc handler invokes it so the
+  // work actually stops instead of leaving a zombie loop pushing progress.
+  const commandAbortRef = useRef<(() => void) | null>(null);
+  const registerAbort = useCallback((abort: (() => void) | null) => {
+    commandAbortRef.current = abort;
+  }, []);
 
   useEffect(() => {
     setTools(listTools());
@@ -79,10 +86,19 @@ export function App({ firstRun = false }: AppProps) {
     // Esc precedence: abort while busy → clear pending input → exit when idle.
     if (key.escape) {
       if (stream.busy) {
+        // A slash command (e.g. /codemap build) registers its own abort. Fire
+        // that first so its background work actually stops; otherwise it
+        // keeps pushing progress updates and competes with the next prompt
+        // for the same provider connection.
+        if (commandAbortRef.current) {
+          commandAbortRef.current();
+          commandAbortRef.current = null;
+        }
         stream.abort();
         stream.setBusy(false);
         stream.setActive('');
         stream.setActiveTool(null);
+        setCodemapProgress(null);
         return;
       }
       if (input) {
@@ -138,6 +154,7 @@ export function App({ firstRun = false }: AppProps) {
         appendLines: stream.appendLines,
         setBusy: stream.setBusy,
         setCodemapProgress,
+        registerAbort,
         enterReconfigure,
         exit,
       },
