@@ -10,6 +10,7 @@ export interface CommandContext {
   appendLines: (...lines: Line[]) => void;
   setBusy: (b: boolean) => void;
   setCodemapProgress: (p: CodemapProgress | null) => void;
+  enterReconfigure: () => void;
   exit: () => void;
 }
 

@@ -20,9 +20,14 @@ import { ReconfigurePrompt } from './components/ReconfigurePrompt.js';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import type { KeyMeta } from './components/MultilineInput.js';
 import { truncate } from './util.js';
-import { loadConfig, saveConfig, clearConfigCache, type NanoConfig } from '../config.js';
+import { loadConfig, saveConfig, clearConfigCache, DEFAULT_CONFIG, type NanoConfig } from '../config.js';
 
-export function App() {
+export interface AppProps {
+  /** When true, the app opens the reconfigure prompt on first paint (used for first-run onboarding). */
+  firstRun?: boolean;
+}
+
+export function App({ firstRun = false }: AppProps) {
   const { exit } = useApp();
   const cwd = process.cwd();
   const { pending, decide } = useApproval();
@@ -44,6 +49,18 @@ export function App() {
   useEffect(() => {
     setTools(listTools());
   }, []);
+
+  useEffect(() => {
+    if (!firstRun) return;
+    setExistingConfig(DEFAULT_CONFIG);
+    setReconfigureMode(true);
+  }, [firstRun]);
+
+  const enterReconfigure = async () => {
+    const config = await loadConfig();
+    setExistingConfig(config);
+    setReconfigureMode(true);
+  };
 
   const suggestions = useMemo(() => suggestCommands(input), [input]);
   useEffect(() => {
@@ -111,13 +128,6 @@ export function App() {
     const trimmed = text.trim();
     setInput('');
 
-    if (trimmed === '/reconfigure') {
-      const config = await loadConfig();
-      setExistingConfig(config);
-      setReconfigureMode(true);
-      return;
-    }
-
     const handled = await runSlashCommand(
       {
         cwd,
@@ -128,6 +138,7 @@ export function App() {
         appendLines: stream.appendLines,
         setBusy: stream.setBusy,
         setCodemapProgress,
+        enterReconfigure,
         exit,
       },
       trimmed,

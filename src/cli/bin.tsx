@@ -1,8 +1,9 @@
 import React from 'react';
 import { render } from 'ink';
+import { readFile } from 'node:fs/promises';
 import { initMcp, shutdownMcp } from '../agent/index.js';
+import { getConfigPath } from '../config.js';
 import { App } from './App.js';
-import { checkAndRunOnboarding } from './onboarding.js';
 
 if (!process.stdin.isTTY) {
   const hint =
@@ -18,13 +19,18 @@ if (mcpToolCount > 0) {
   console.error(`[mcp] ${mcpToolCount} tool(s) available`);
 }
 
-const shouldExit = await checkAndRunOnboarding();
-if (shouldExit) {
-  await shutdownMcp();
-  process.exit(0);
+async function configExists(): Promise<boolean> {
+  try {
+    await readFile(getConfigPath(), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-const app = render(<App />);
+const firstRun = !(await configExists());
+
+const app = render(<App firstRun={firstRun} />);
 
 const cleanup = async () => {
   app.unmount();

@@ -1,5 +1,4 @@
 import { loadConfig, saveConfig, clearConfigCache, getConfigPath, type NanoConfig } from '../../config.js';
-import { reconfigure } from '../onboarding.js';
 import type { SlashCommand } from './types.js';
 
 export async function getCurrentConfig(): Promise<NanoConfig> {
@@ -16,7 +15,7 @@ function formatConfig(config: NanoConfig): string {
   lines.push('── Config ──');
   lines.push(`Path: ${getConfigPath()}`);
   lines.push('');
-  
+
   if (config.provider) {
     lines.push('Provider:');
     lines.push(`  active: ${config.provider.active}`);
@@ -39,7 +38,7 @@ function formatConfig(config: NanoConfig): string {
       }
     }
   }
-  
+
   if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
     lines.push('');
     lines.push('MCP Servers:');
@@ -51,48 +50,26 @@ function formatConfig(config: NanoConfig): string {
       }
     }
   }
-  
+
   if (config.security?.shell) {
     lines.push('');
     lines.push('Security:');
     lines.push(`  requireApproval: ${config.security.shell.requireApproval !== false}`);
   }
-  
+
   lines.push('──');
   return lines.join('\n');
 }
 
 export const configCommand: SlashCommand = {
   trigger: '/config',
-  description: 'Show or modify configuration (use /config reconfigure for full setup)',
-  usage: '/config [reconfigure]',
-  match: (input) => input.startsWith('/config'),
+  description: 'Show current configuration (use /reconfigure to change it)',
+  match: (input) => input === '/config',
   async run(ctx, input) {
     ctx.appendLines({ kind: 'user', text: input });
-    
     try {
-      const parts = input.split(' ').filter(Boolean);
-      
-      if (parts.length === 1 || (parts.length === 2 && parts[1] === 'show')) {
-        const config = await loadConfig();
-        ctx.appendLines({ kind: 'assistant', text: formatConfig(config) });
-        return;
-      }
-      
-      if (parts[1] === 'reconfigure') {
-        const newConfig = await reconfigure();
-        clearConfigCache();
-        ctx.appendLines({ 
-          kind: 'assistant', 
-          text: `Config updated. New active provider: ${newConfig.provider?.active}` 
-        });
-        return;
-      }
-      
-      ctx.appendLines({ 
-        kind: 'error', 
-        text: 'Unknown subcommand. Use /config or /config reconfigure' 
-      });
+      const config = await loadConfig();
+      ctx.appendLines({ kind: 'assistant', text: formatConfig(config) });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       ctx.appendLines({ kind: 'error', text: msg });

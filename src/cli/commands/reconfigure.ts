@@ -1,5 +1,3 @@
-import { reconfigure } from '../onboarding.js';
-import { clearConfigCache } from '../../config.js';
 import type { SlashCommand } from './types.js';
 
 export const reconfigureCommand: SlashCommand = {
@@ -8,16 +6,6 @@ export const reconfigureCommand: SlashCommand = {
   match: (input) => input === '/reconfigure',
   async run(ctx, input) {
     ctx.appendLines({ kind: 'user', text: input });
-    try {
-      const newConfig = await reconfigure();
-      clearConfigCache();
-      ctx.appendLines({ 
-        kind: 'assistant', 
-        text: `✅ Config updated!\nActive provider: ${newConfig.provider?.active}\n\nRestart bonfire for changes to take effect.` 
-      });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      ctx.appendLines({ kind: 'error', text: msg });
-    }
+    ctx.enterReconfigure();
   },
 };
