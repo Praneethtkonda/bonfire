@@ -17,8 +17,10 @@ interface ToolWithExecute {
 /**
  * Wrap a tool so its `execute` first goes through the approval handler.
  * Used when `security.mcpRequireApproval` is set.
+ *
+ * Exported for unit testing.
  */
-function gateTool(name: string, tool: unknown): unknown {
+export function gateTool(name: string, tool: unknown): unknown {
   const t = tool as ToolWithExecute;
   if (!t || typeof t.execute !== 'function') return tool;
   const original = t.execute.bind(t);
