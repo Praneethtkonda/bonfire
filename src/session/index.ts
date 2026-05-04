@@ -1,7 +1,13 @@
 import type { Session } from './types.js';
 
 export type { Session, SessionMeta } from './types.js';
-export { loadSession, saveSession, deleteSession } from './storage.js';
+export {
+  loadSession,
+  saveSession,
+  deleteSession,
+  resolveSessionId,
+  AmbiguousSessionIdError,
+} from './storage.js';
 export { listSessions } from './meta.js';
 
 function generateId(): string {

@@ -1,14 +1,36 @@
 import {
+  AmbiguousSessionIdError,
   createSession,
   deleteSession,
   listSessions,
   loadSession,
+  resolveSessionId,
   saveSession,
 } from '../../session/index.js';
 import type { SlashCommand } from './types.js';
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+async function resolveOrReport(
+  ctx: import('./types.js').CommandContext,
+  partial: string,
+): Promise<string | null> {
+  try {
+    const id = await resolveSessionId(ctx.cwd, partial);
+    if (!id) {
+      ctx.appendLines({ kind: 'error', text: `Session "${partial}" not found` });
+      return null;
+    }
+    return id;
+  } catch (e) {
+    if (e instanceof AmbiguousSessionIdError) {
+      ctx.appendLines({ kind: 'error', text: e.message });
+      return null;
+    }
+    throw e;
+  }
 }
 
 export const sessionsCommand: SlashCommand = {
@@ -96,11 +118,13 @@ async function handleNew(ctx: import('./types.js').CommandContext) {
 }
 
 async function handleLoad(ctx: import('./types.js').CommandContext, sub: string) {
-  const id = sub.split(/\s+/)[1];
-  if (!id) {
+  const partial = sub.split(/\s+/)[1];
+  if (!partial) {
     ctx.appendLines({ kind: 'error', text: 'Usage: /sessions load <id>' });
     return;
   }
+  const id = await resolveOrReport(ctx, partial);
+  if (!id) return;
   const session = await loadSession(ctx.cwd, id);
   if (!session) {
     ctx.appendLines({ kind: 'error', text: `Session "${id}" not found` });
@@ -130,11 +154,13 @@ async function handleSave(ctx: import('./types.js').CommandContext) {
 }
 
 async function handleDelete(ctx: import('./types.js').CommandContext, sub: string) {
-  const id = sub.split(/\s+/)[1];
-  if (!id) {
+  const partial = sub.split(/\s+/)[1];
+  if (!partial) {
     ctx.appendLines({ kind: 'error', text: 'Usage: /sessions delete <id>' });
     return;
   }
+  const id = await resolveOrReport(ctx, partial);
+  if (!id) return;
   const ok = await deleteSession(ctx.cwd, id);
   if (ok) {
     ctx.appendLines({ kind: 'assistant', text: `Session ${id} deleted.` });

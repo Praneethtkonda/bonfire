@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Session } from './types.js';
 
@@ -14,6 +14,44 @@ export function sessionPath(root: string, id: string): string {
 }
 
 export const sessionFileExt = SESSION_FILE_EXT;
+
+export class AmbiguousSessionIdError extends Error {
+  constructor(public readonly prefix: string, public readonly matches: string[]) {
+    super(
+      `Ambiguous session id "${prefix}" — matches ${matches.length}: ${matches
+        .slice(0, 5)
+        .join(', ')}${matches.length > 5 ? ', …' : ''}`,
+    );
+    this.name = 'AmbiguousSessionIdError';
+  }
+}
+
+/**
+ * Resolve a possibly-truncated session id to its full form by listing the
+ * sessions directory. Exact matches win immediately. A unique prefix returns
+ * the matching id. An ambiguous prefix throws AmbiguousSessionIdError so the
+ * caller can ask for more characters. Returns null if nothing matches.
+ */
+export async function resolveSessionId(
+  root: string,
+  partial: string,
+): Promise<string | null> {
+  if (!partial) return null;
+  let entries: string[];
+  try {
+    entries = await readdir(sessionsDir(root));
+  } catch {
+    return null;
+  }
+  const ids = entries
+    .filter((e) => e.endsWith(SESSION_FILE_EXT))
+    .map((e) => e.slice(0, -SESSION_FILE_EXT.length));
+  if (ids.includes(partial)) return partial;
+  const matches = ids.filter((id) => id.startsWith(partial));
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+  throw new AmbiguousSessionIdError(partial, matches);
+}
 
 /** Load a session by ID. Returns null if not found or unparseable. */
 export async function loadSession(root: string, id: string): Promise<Session | null> {
