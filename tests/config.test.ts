@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { validateConfig, DEFAULT_CONFIG, type NanoConfig } from './config.js';
+import {
+  validateConfig,
+  DEFAULT_CONFIG,
+  expandEnv,
+  expandEnvMap,
+  type NanoConfig,
+} from '../src/config.js';
 
 describe('validateConfig', () => {
   describe('provider validation', () => {
@@ -177,6 +183,49 @@ describe('validateConfig', () => {
       const errors = validateConfig({});
       expect(errors).toHaveLength(0);
     });
+  });
+});
+
+describe('expandEnv', () => {
+  it('substitutes a defined variable', () => {
+    expect(expandEnv('Bearer ${TOKEN}', { TOKEN: 'abc' })).toBe('Bearer abc');
+  });
+
+  it('substitutes multiple variables in one string', () => {
+    expect(expandEnv('${A}-${B}', { A: 'x', B: 'y' })).toBe('x-y');
+  });
+
+  it('leaves missing variables as the literal placeholder', () => {
+    expect(expandEnv('Bearer ${MISSING}', {})).toBe('Bearer ${MISSING}');
+  });
+
+  it('is case-insensitive about the placeholder syntax markers but matches env names verbatim', () => {
+    // Regex allows lowercase letters in the var name; match is verbatim against env keys.
+    expect(expandEnv('${foo}', { foo: 'ok' })).toBe('ok');
+    expect(expandEnv('${FOO}', { foo: 'ok' })).toBe('${FOO}');
+  });
+
+  it('handles strings with no placeholders unchanged', () => {
+    expect(expandEnv('plain text', { TOKEN: 'abc' })).toBe('plain text');
+  });
+});
+
+describe('expandEnvMap', () => {
+  it('returns undefined when given undefined', () => {
+    expect(expandEnvMap(undefined, { X: '1' })).toBeUndefined();
+  });
+
+  it('expands every value in the map', () => {
+    const out = expandEnvMap(
+      { Authorization: 'Bearer ${T}', 'X-Trace': 'static' },
+      { T: 'abc' },
+    );
+    expect(out).toEqual({ Authorization: 'Bearer abc', 'X-Trace': 'static' });
+  });
+
+  it('preserves missing variables in values', () => {
+    const out = expandEnvMap({ k: '${MISSING}' }, {});
+    expect(out).toEqual({ k: '${MISSING}' });
   });
 });
 
