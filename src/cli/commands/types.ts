@@ -10,6 +10,13 @@ export interface CommandContext {
   appendLines: (...lines: Line[]) => void;
   setBusy: (b: boolean) => void;
   setCodemapProgress: (p: CodemapProgress | null) => void;
+  /**
+   * Register (or clear with `null`) an abort callback for a long-running
+   * command. The Esc handler in App.tsx invokes the registered callback so
+   * background work — e.g. an in-flight `/codemap build` — actually stops
+   * instead of just clearing the busy flag.
+   */
+  registerAbort: (abort: (() => void) | null) => void;
   enterReconfigure: () => void;
   exit: () => void;
 }

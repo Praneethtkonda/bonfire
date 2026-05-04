@@ -31,21 +31,30 @@ export const codemapCommand: SlashCommand = {
         return;
       }
       if (sub === 'build' || sub === 'rebuild') {
+        const controller = new AbortController();
+        ctx.registerAbort(() => controller.abort());
         ctx.setBusy(true);
-        if (sub === 'rebuild') await rebuildCodemap(ctx.cwd);
-        ctx.setCodemapProgress({ done: 0, total: 0, path: 'starting' });
-        const map = await buildSummaries(ctx.cwd, {
-          force: sub === 'rebuild',
-          onProgress: (done, total, path) =>
-            ctx.setCodemapProgress({ done, total, path }),
-        });
-        ctx.setCodemapProgress(null);
-        ctx.setBusy(false);
-        const s = statsFor(map);
-        ctx.appendLines({
-          kind: 'assistant',
-          text: `codemap ${sub} complete · summarized ${s.summarized} nodes`,
-        });
+        try {
+          if (sub === 'rebuild') await rebuildCodemap(ctx.cwd);
+          ctx.setCodemapProgress({ done: 0, total: 0, path: 'starting' });
+          const map = await buildSummaries(ctx.cwd, {
+            force: sub === 'rebuild',
+            signal: controller.signal,
+            onProgress: (done, total, path) =>
+              ctx.setCodemapProgress({ done, total, path }),
+          });
+          const s = statsFor(map);
+          ctx.appendLines({
+            kind: controller.signal.aborted ? 'error' : 'assistant',
+            text: controller.signal.aborted
+              ? `codemap ${sub} aborted · summarized ${s.summarized} nodes so far`
+              : `codemap ${sub} complete · summarized ${s.summarized} nodes`,
+          });
+        } finally {
+          ctx.setCodemapProgress(null);
+          ctx.setBusy(false);
+          ctx.registerAbort(null);
+        }
         return;
       }
       ctx.appendLines({
@@ -55,6 +64,7 @@ export const codemapCommand: SlashCommand = {
     } catch (e: unknown) {
       ctx.setCodemapProgress(null);
       ctx.setBusy(false);
+      ctx.registerAbort(null);
       ctx.appendLines({ kind: 'error', text: errorMessage(e) });
     }
   },

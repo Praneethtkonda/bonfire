@@ -88,6 +88,9 @@ export async function summarizeCodemap(
   const recordProgress = (path: string) => {
     done += 1;
     sinceCheckpoint += 1;
+    // Skip the `onProgress` callback once aborted so a torn-down build can't
+    // keep pushing updates into the TUI after the user pressed Esc.
+    if (options.signal?.aborted) return;
     options.onProgress?.(done, total, path);
     if (checkpointEvery > 0 && sinceCheckpoint >= checkpointEvery) {
       sinceCheckpoint = 0;
