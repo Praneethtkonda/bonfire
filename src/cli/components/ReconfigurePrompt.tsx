@@ -69,9 +69,19 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
     return cfg?.model || 'unsloth/Qwen3.6-35B-A3B';
   };
 
-  const currentValue = addingHeader
+  // Effective value if the user submits right now: typed text wins, else the
+  // step's default. Used for save-time logic.
+  const effectiveValue = addingHeader
     ? (step < 4 + headers.length ? headerKey : headerValue)
     : (inputValue.trim() || getDefaultValue(step));
+
+  // Display split: what the user has typed (bold + cursor) and a default
+  // placeholder shown dim when nothing has been typed yet. Keeping these
+  // visually distinct prevents the "I thought I deleted ollama" confusion.
+  const typedValue = addingHeader
+    ? (step < 4 + headers.length ? headerKey : headerValue)
+    : inputValue;
+  const placeholderValue = addingHeader ? '' : getDefaultValue(step);
 
   useInput((ch, key) => {
     if (key.escape) {
@@ -86,7 +96,7 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
     }
 
     if (key.return) {
-      const finalValue = currentValue;
+      const finalValue = effectiveValue;
 
       if (addingHeader) {
         if (!headerKey.trim()) {
@@ -114,13 +124,23 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
         }
       } else if (step === 1) {
         setBaseURL(finalValue);
+        // For ollama/llama.cpp this is not the final step — flow continues
+        // to model. For remote there are still more steps after this.
       } else if (step === 2) {
         setModel(finalValue);
+        // For ollama/llama.cpp, step 2 is the final step. React hasn't
+        // flushed setModel yet, so pass the fresh value into buildConfig
+        // explicitly instead of letting it read stale closure state.
+        if (!isRemote) {
+          onComplete(buildConfig({ model: finalValue }));
+          return;
+        }
       } else if (step === 3) {
         setApiKey(finalValue);
       } else if (step === totalSteps - 1) {
-        const finalConfig = buildConfig();
-        onComplete(finalConfig);
+        // Remote-only "Done?" step. All previous setX calls have already
+        // flushed across earlier renders, so closure state is current.
+        onComplete(buildConfig());
         return;
       } else {
         const headerIdx = step - 4;
@@ -136,8 +156,8 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
       if (step < totalSteps - 1) {
         setStep(step + 1);
       } else {
-        const finalConfig = buildConfig();
-        onComplete(finalConfig);
+        // Defensive fallback — every legitimate path above already returned.
+        onComplete(buildConfig());
       }
       return;
     }
@@ -168,15 +188,27 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
     }
   });
 
-  const buildConfig = (): NanoConfig => {
+  /**
+   * `overrides` carries any value just submitted via the latest Enter press —
+   * React has not yet flushed the corresponding setState, so the closure
+   * variables (`model`, `baseURL`, …) below are still stale for that one
+   * field. Callers pass the fresh value here to bypass the stale read.
+   */
+  const buildConfig = (
+    overrides: { baseURL?: string; model?: string; apiKey?: string } = {},
+  ): NanoConfig => {
+    const finalBaseURL = overrides.baseURL ?? baseURL;
+    const finalModel = overrides.model ?? model;
+    const finalApiKey = overrides.apiKey ?? apiKey;
+
     const baseProviders = {
       ollama: {
-        baseURL: provider === 'ollama' ? baseURL : (existingConfig.provider?.ollama?.baseURL || 'http://127.0.0.1:11434/api'),
-        model: provider === 'ollama' ? model : (existingConfig.provider?.ollama?.model || 'qwen3.6:latest'),
+        baseURL: provider === 'ollama' ? finalBaseURL : (existingConfig.provider?.ollama?.baseURL || 'http://127.0.0.1:11434/api'),
+        model: provider === 'ollama' ? finalModel : (existingConfig.provider?.ollama?.model || 'qwen3.6:latest'),
       },
       'llama.cpp': {
-        baseURL: provider === 'llama.cpp' ? baseURL : (existingConfig.provider?.['llama.cpp']?.baseURL || 'http://127.0.0.1:8080/v1'),
-        model: provider === 'llama.cpp' ? model : (existingConfig.provider?.['llama.cpp']?.model || 'unsloth/Qwen3.6-35B-A3B'),
+        baseURL: provider === 'llama.cpp' ? finalBaseURL : (existingConfig.provider?.['llama.cpp']?.baseURL || 'http://127.0.0.1:8080/v1'),
+        model: provider === 'llama.cpp' ? finalModel : (existingConfig.provider?.['llama.cpp']?.model || 'unsloth/Qwen3.6-35B-A3B'),
       },
     };
 
@@ -191,9 +223,9 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
           ...baseProviders,
           active: 'remote',
           remote: {
-            baseURL,
-            model,
-            ...(apiKey ? { apiKey } : {}),
+            baseURL: finalBaseURL,
+            model: finalModel,
+            ...(finalApiKey ? { apiKey: finalApiKey } : {}),
             ...(Object.keys(headerObj).length > 0 ? { headers: headerObj } : {}),
           },
         },
@@ -222,8 +254,23 @@ export function ReconfigurePrompt({ existingConfig, onComplete, onCancel }: Reco
       
       <Box marginTop={1}>
         <Text>{getStepLabel(step)}: </Text>
-        <Text bold>{currentValue || '(empty)'}</Text>
+        {typedValue ? (
+          <Text>
+            <Text bold>{typedValue}</Text>
+            <Text inverse> </Text>
+          </Text>
+        ) : (
+          <Text>
+            <Text inverse> </Text>
+            {placeholderValue ? <Text dimColor>{placeholderValue}</Text> : null}
+          </Text>
+        )}
       </Box>
+      {!typedValue && placeholderValue ? (
+        <Box>
+          <Text dimColor>(Enter to accept the default shown above, or type to override)</Text>
+        </Box>
+      ) : null}
       
       {step === 0 && (
         <Box marginTop={1}>
