@@ -1,3 +1,5 @@
+import { formatProviderError } from './error-format.js';
+
 export interface TokenUsage {
   input: number;
   output: number;
@@ -97,31 +99,8 @@ export function normalizePart(raw: RawPart): AgentEvent | null {
       const usage = normalizeUsage(raw.totalUsage ?? raw.usage);
       return usage ? { type: 'usage', usage } : null;
     }
-    case 'error': {
-      let errorMsg = 'Unknown error';
-      if (raw.error instanceof Error) {
-        errorMsg = raw.error.message;
-        // Extract status code from error message if present
-        if (raw.error.message.includes('401')) {
-          errorMsg = 'Authentication failed (401). Check your API key with /reconfigure.';
-        } else if (raw.error.message.includes('403')) {
-          errorMsg = 'Forbidden (403). Check your API key permissions.';
-        } else if (raw.error.message.includes('429')) {
-          errorMsg = 'Rate limit exceeded (429). Please wait and try again.';
-        } else if (raw.error.message.includes('500')) {
-          errorMsg = 'Server error (500). The model service may be down.';
-        } else if (raw.error.message.includes('503')) {
-          errorMsg = 'Service unavailable (503). The model service may be overloaded.';
-        } else if (raw.error.message.includes('ECONNREFUSED')) {
-          errorMsg = 'Could not connect. Is the model server running?';
-        } else if (raw.error.message.includes('timeout')) {
-          errorMsg = 'Request timed out. The model may be slow or unresponsive.';
-        }
-      } else if (raw.error) {
-        errorMsg = String(raw.error);
-      }
-      return { type: 'error', error: errorMsg };
-    }
+    case 'error':
+      return { type: 'error', error: formatProviderError(raw.error) };
     default:
       return null;
   }

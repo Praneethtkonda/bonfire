@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import type { ModelMessage } from 'ai';
 import { runAgent, type TokenUsage } from '../../agent/index.js';
+import { formatProviderError } from '../../agent/error-format.js';
 import { saveSession, type Session } from '../../session/index.js';
 import type { Line, UsageTotals } from '../types.js';
 
@@ -33,28 +34,6 @@ interface UseAgentStreamResult {
   setActiveTool: (t: ActiveTool | null) => void;
 }
 
-function errorMessage(e: unknown): string {
-  if (e instanceof Error) {
-    // Handle specific error types
-    if (e.message.includes('API key')) {
-      return 'Invalid or missing API key. Use /reconfigure to update credentials.';
-    }
-    if (e.message.includes('ECONNREFUSED') || e.message.includes('connect')) {
-      return 'Could not connect to the model server. Is the provider running?';
-    }
-    if (e.message.includes('timeout')) {
-      return 'Request timed out. The model may be slow or unresponsive.';
-    }
-    if (e.message.includes('429') || e.message.includes('rate limit')) {
-      return 'Rate limit exceeded. Please wait and try again.';
-    }
-    if (e.message.includes('401') || e.message.includes('403')) {
-      return 'Authentication failed. Check your API key with /config or /reconfigure.';
-    }
-    return e.message;
-  }
-  return String(e);
-}
 
 export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
   const { cwd, currentSession, setCurrentSession } = args;
@@ -155,7 +134,7 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
         }
       } catch (e: unknown) {
         if (!aborted) {
-          appendLines({ kind: 'error', text: errorMessage(e) });
+          appendLines({ kind: 'error', text: formatProviderError(e) });
         }
       }
       setActive('');
