@@ -272,8 +272,13 @@ Edit `config.json` at the path above directly, or use `/reconfigure` for the int
 bonfire reads two kinds of markdown from your home directory and your repo, **with no config at all**:
 
 ```
-~/.bonfire/system.md         # global system prompt (every project)
-~/.bonfire/skills/<name>.md  # global skills (every project)
+# Global (OS-specific location - see below)
+~/.config/bonfire/system.md         # Linux/macOS
+~/.config/bonfire/skills/<name>.md  # Linux/macOS
+%APPDATA%/bonfire/system.md         # Windows
+%APPDATA%/bonfire/skills/<name>.md # Windows
+
+# Project (in your repo)
 .bonfire/system.md           # project system prompt
 .bonfire/skills/<name>.md    # project skills
 ```
@@ -361,7 +366,7 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 
 **MCP-native.** Plug in any [Model Context Protocol](https://modelcontextprotocol.io) server — stdio or Streamable HTTP. Each server's tools land namespaced as `<server>__<tool>`.
 
-**Custom system prompt.** Drop a `~/.bonfire/system.md` for a global override, or `.bonfire/system.md` for a project-level one. Appended to the built-in prompt by default; flip `systemPromptMode: "replace"` for full control.
+**Custom system prompt.** Drop a `~/.config/bonfire/system.md` (Linux/macOS) or `%APPDATA%/bonfire/system.md` (Windows) for a global override, or `.bonfire/system.md` for a project-level one. Appended to the built-in prompt by default; flip `systemPromptMode: "replace"` for full control.
 
 **Right-side tools pane.** See exactly what the model has access to. The active tool highlights green during a call.
 
@@ -444,8 +449,8 @@ For llama.cpp, tool calling requires `llama-server --jinja`.
 - [x] Slash-command autocomplete
 - [x] Multiline input (Shift+Enter on modern terminals; Alt+Enter / Ctrl+J everywhere) + paste redaction
 - [x] Shell approval + hardcoded deny-list + configurable timeout
-- [x] Skills support — drop-in `~/.bonfire/skills/<name>.md`
-- [x] Configurable system prompt — `~/.bonfire/system.md` + project override
+- [x] Skills support — drop-in `~/.config/bonfire/skills/<name>.md` (Linux/macOS) / `%APPDATA%/bonfire/skills/<name>.md` (Windows)
+- [x] Configurable system prompt — `~/.config/bonfire/system.md` / `%APPDATA%/bonfire/system.md` + project override
 - [x] OS config directory (not project-level)
 - [x] Interactive reconfigure TUI (`/reconfigure`) handling first-run + remote provider
 - [x] Remote provider (any OpenAI-compatible API)
@@ -470,7 +475,7 @@ src/
     index.ts           # runAgent, initMcp, listTools
     provider.ts        # lazy provider, debug fetch with header redaction
     stream.ts          # typed normalizer for AI SDK fullStream events
-    system-prompt.ts   # 3-layer prompt: built-in + ~/.bonfire + .bonfire/system.md
+    system-prompt.ts   # 3-layer prompt: built-in + global bonfire dir + .bonfire/system.md
     error-format.ts    # single source of truth for provider error messages
   tools/
     safe-path.ts       # realpath-aware allowlist (closes symlink escapes)
@@ -482,7 +487,7 @@ src/
   session/
     index.ts, storage.ts, meta.ts
   skills/
-    loader.ts          # scans ~/.bonfire/skills + .bonfire/skills, parses frontmatter
+    loader.ts          # scans global bonfire dir + .bonfire/skills, parses frontmatter
     tool.ts            # load_skill tool — model calls this on demand
   codemap/
     walk.ts            # iterative BFS, lstat-based, builds skeleton tree

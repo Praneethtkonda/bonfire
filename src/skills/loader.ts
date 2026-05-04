@@ -2,6 +2,15 @@ import { readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
+export function getGlobalBonfireDir(): string {
+  const home = homedir();
+  const isWindows = process.platform === 'win32';
+  const baseDir = isWindows
+    ? process.env.APPDATA || resolve(home, 'AppData', 'Roaming')
+    : resolve(home, '.config');
+  return resolve(baseDir, 'bonfire');
+}
+
 export interface Skill {
   name: string;
   description: string;
@@ -71,13 +80,14 @@ async function readSkillsDir(
 let cache: Skill[] | null = null;
 
 /**
- * Discover skills from ~/.bonfire/skills/ (global) and <cwd>/.bonfire/skills/ (project).
+ * Discover skills from the global bonfire dir (OS-specific) and <cwd>/.bonfire/skills/ (project).
  * Project skills override global skills with the same name.
  */
 export async function loadSkills(cwd: string = process.cwd()): Promise<Skill[]> {
   if (cache) return cache;
+  const globalDir = getGlobalBonfireDir();
   const [global, project] = await Promise.all([
-    readSkillsDir(resolve(homedir(), '.bonfire', 'skills'), 'global'),
+    readSkillsDir(resolve(globalDir, 'skills'), 'global'),
     readSkillsDir(resolve(cwd, '.bonfire', 'skills'), 'project'),
   ]);
   const merged = new Map<string, Skill>();

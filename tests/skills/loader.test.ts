@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
-// Loader reads `homedir()` from 'node:os'. Hoisted mock keeps a mutable ref
-// so each test can swap in a fresh scratch home.
 const mockHome = { value: '' };
+const originalPlatform = process.platform;
+const originalAppData = process.env.APPDATA;
+
 vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return { ...actual, homedir: () => mockHome.value };
+  const original = await importOriginal<typeof import('node:os')>();
+  return { ...original, homedir: () => mockHome.value };
 });
 
 const { findSkill, invalidateSkills, loadSkills } = await import(
@@ -22,11 +23,16 @@ beforeEach(async () => {
   cwdScratch = await mkdtemp(join(tmpdir(), 'bonfire-skills-cwd-'));
   homeScratch = await mkdtemp(join(tmpdir(), 'bonfire-skills-home-'));
   mockHome.value = homeScratch;
+  Object.defineProperty(process, 'platform', { value: 'linux' });
+  process.env.APPDATA = '';
   invalidateSkills();
 });
 
 afterEach(async () => {
   invalidateSkills();
+  Object.defineProperty(process, 'platform', { value: originalPlatform });
+  if (originalAppData === undefined) delete process.env.APPDATA;
+  else process.env.APPDATA = originalAppData;
   await rm(cwdScratch, { recursive: true, force: true });
   await rm(homeScratch, { recursive: true, force: true });
 });
@@ -100,9 +106,11 @@ Step 2. Test it.`,
   });
 
   it('merges global + project skills, project wins on collision', async () => {
-    await plantSkill(homeScratch, 'shared.md', '---\nname: shared\ndescription: GLOBAL\n---\nglobal-body');
+    const globalDir = join(homeScratch, '.config', 'bonfire', 'skills');
+    await mkdir(globalDir, { recursive: true });
+    await writeFile(join(globalDir, 'shared.md'), '---\nname: shared\ndescription: GLOBAL\n---\nglobal-body', 'utf-8');
+    await writeFile(join(globalDir, 'global-only.md'), '---\nname: global-only\ndescription: g\n---\nbody', 'utf-8');
     await plantSkill(cwdScratch, 'shared.md', '---\nname: shared\ndescription: PROJECT\n---\nproject-body');
-    await plantSkill(homeScratch, 'global-only.md', '---\nname: global-only\ndescription: g\n---\nbody');
 
     const skills = await loadSkills(cwdScratch);
     const byName = new Map(skills.map((s) => [s.name, s]));

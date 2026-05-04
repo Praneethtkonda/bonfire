@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const homeRef = { value: '' };
 const platformRef = { value: process.platform as string };
+const oldAppData = process.env.APPDATA;
 
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:os')>();
@@ -13,6 +14,15 @@ vi.mock('node:os', async (importOriginal) => {
     homedir: () => homeRef.value,
     platform: () => platformRef.value,
   };
+});
+
+beforeAll(() => {
+  process.env.APPDATA = '';
+});
+
+afterAll(() => {
+  if (oldAppData === undefined) delete process.env.APPDATA;
+  else process.env.APPDATA = oldAppData;
 });
 
 const {

@@ -1,9 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { getAllowedDirs } from '../tools/index.js';
 import { loadConfig } from '../config.js';
-import { loadSkills, type Skill } from '../skills/index.js';
+import { loadSkills, type Skill, getGlobalBonfireDir } from '../skills/index.js';
 
 const BASE_PROMPT = `You are bonfire, a terminal coding assistant.
 
@@ -47,7 +46,7 @@ async function readIfExists(path: string): Promise<string | null> {
 /**
  * User overrides, in priority order (lowest → highest):
  *   1. Built-in BASE_PROMPT
- *   2. ~/.bonfire/system.md
+ *   2. Global bonfire dir (OS-specific) + system.md
  *   3. <cwd>/.bonfire/system.md
  *   4. config.systemPrompt (inline string in bonfire.config.json)
  *
@@ -56,7 +55,7 @@ async function readIfExists(path: string): Promise<string | null> {
 async function gatherOverrides(cwd: string): Promise<string[]> {
   const cfg = await loadConfig();
   const overrides: string[] = [];
-  const global = await readIfExists(resolve(homedir(), '.bonfire', 'system.md'));
+  const global = await readIfExists(resolve(getGlobalBonfireDir(), 'system.md'));
   if (global) overrides.push(global);
   const project = await readIfExists(resolve(cwd, '.bonfire', 'system.md'));
   if (project) overrides.push(project);
