@@ -13,3 +13,12 @@ export function trackChange(path: string, kind: 'write' | 'edit', bytes: number)
   prev.bytes = bytes;
   changedFiles.set(path, prev);
 }
+
+/**
+ * Clear the modified-files tally. Called when a fresh conversation starts so
+ * the panel reflects the current session rather than everything touched since
+ * the process launched.
+ */
+export function resetChangedFiles(): void {
+  changedFiles.clear();
+}

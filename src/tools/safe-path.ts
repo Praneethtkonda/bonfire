@@ -1,19 +1,31 @@
 import { realpath, stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 
-const CWD = process.cwd();
-const allowedDirs: string[] = [CWD];
+/**
+ * The sandbox root. Read once at startup rather than on every call so a tool
+ * that changes the process working directory can't silently widen the
+ * allowlist, but resettable so tests (and `/dirs` reconfiguration) aren't
+ * stuck with whatever cwd the module happened to be imported under.
+ */
+let cwd: string = process.cwd();
+let allowedDirs: string[] = [cwd];
 
 export function getCwd(): string {
-  return CWD;
+  return cwd;
 }
 
 export function getAllowedDirs(): readonly string[] {
   return allowedDirs;
 }
 
+/** Re-root the sandbox. Clears every previously added directory. */
+export function resetAllowedDirs(root: string = process.cwd()): void {
+  cwd = resolve(root);
+  allowedDirs = [cwd];
+}
+
 export async function addAllowedDir(p: string): Promise<string> {
-  const abs = resolve(CWD, p);
+  const abs = resolve(cwd, p);
   const s = await stat(abs);
   if (!s.isDirectory()) throw new Error(`${abs} is not a directory`);
   if (!allowedDirs.includes(abs)) allowedDirs.push(abs);
@@ -30,7 +42,7 @@ function isInside(child: string, parent: string): boolean {
  * escape the sandbox by pointing elsewhere on disk.
  */
 export async function safePath(p: string): Promise<string> {
-  const abs = resolve(CWD, p);
+  const abs = resolve(cwd, p);
 
   // The lexical check rejects "../../etc/passwd" before any I/O.
   const lexicallyAllowed = allowedDirs.some((dir) => isInside(abs, dir));

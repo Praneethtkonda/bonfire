@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { gateTool } from '../../src/mcp/index.js';
 import { setApprovalHandler, type ApprovalDecision } from '../../src/tools/approval.js';
+import { resetRememberedApprovals } from '../../src/tools/remembered.js';
 
 interface ToolWithExecute {
   description?: string;
@@ -93,5 +94,37 @@ describe('gateTool', () => {
     };
     const gated = gateTool('x', tool) as ToolWithExecute;
     expect(gated.description).toBe('list files');
+  });
+});
+
+describe('gateTool remembered approvals', () => {
+  it('stops prompting after the user answers "always" for that tool', async () => {
+    resetRememberedApprovals();
+    let prompts = 0;
+    setApprovalHandler(async () => {
+      prompts++;
+      return 'always' as ApprovalDecision;
+    });
+    const tool: ToolWithExecute = { execute: async () => ({ ok: true }) };
+    const gated = gateTool('files:list', tool) as ToolWithExecute;
+    expect(await gated.execute!({})).toEqual({ ok: true });
+    expect(await gated.execute!({})).toEqual({ ok: true });
+    expect(prompts).toBe(1);
+    resetRememberedApprovals();
+  });
+
+  it('keeps prompting for a different tool', async () => {
+    resetRememberedApprovals();
+    let prompts = 0;
+    setApprovalHandler(async () => {
+      prompts++;
+      return 'always' as ApprovalDecision;
+    });
+    const gate = (name: string) =>
+      gateTool(name, { execute: async () => ({ ok: true }) }) as ToolWithExecute;
+    await gate('a:one').execute!({});
+    await gate('b:two').execute!({});
+    expect(prompts).toBe(2);
+    resetRememberedApprovals();
   });
 });

@@ -171,12 +171,13 @@ Or configure manually in your config file (see below).
 
 ### Config Location
 
-Configuration lives in a single file in your OS config directory:
+Configuration is layered — later layers win, and each is optional:
 
-- **Linux/macOS**: `~/.config/bonfire/config.json`
-- **Windows**: `%APPDATA%/bonfire/config.json`
+1. **Built-in defaults**
+2. **Global config** — `~/.config/bonfire/config.json` (Linux/macOS) or `%APPDATA%/bonfire/config.json` (Windows)
+3. **Project config** — `bonfire.config.json` in the directory you launched bonfire from
 
-The config travels with you — there's no per-project config file to maintain.
+The global file travels with you; drop a `bonfire.config.json` in a repo when that repo needs a different model, a bigger context window, or its own MCP servers. Merging is deep, so a project file that only sets `context.maxTokens` keeps every other global setting intact.
 
 ### Quick Reconfigure
 
@@ -233,11 +234,25 @@ Edit `config.json` at the path above directly, or use `/reconfigure` for the int
       "deniedCommands": ["^curl\\s"],
       "timeoutMs": 60000
     },
-    "mcpRequireApproval": false
+    "mcpRequireApproval": false,
+    "fetch": {
+      "allowPrivateNetwork": false,
+      "requireApproval": false
+    }
   },
 
   "codemap": {
     "concurrency": 3
+  },
+
+  "context": {
+    "maxTokens": 8192,
+    "compactThreshold": 0.75,
+    "autoCompact": true
+  },
+
+  "ui": {
+    "theme": "default"
   },
 
   "mcpServers": {
@@ -250,6 +265,20 @@ Edit `config.json` at the path above directly, or use `/reconfigure` for the int
 ```
 
 `${ENV_VAR}` references inside any provider field, MCP env, or MCP headers are expanded at startup. Bump `codemap.concurrency` if you're driving a fast remote API — a local Ollama is fine at the default 3.
+
+#### Context window
+
+`context.maxTokens` should match what your model server is actually serving — `--ctx-size` for `llama-server`, `num_ctx` for Ollama. bonfire estimates how much of that window the conversation is using, shows it in the status bar, and compacts history automatically once usage crosses `compactThreshold`. Compaction is mechanical, not model-driven: it shortens old tool output first, then drops whole turns from the top, always cutting at a user message so a tool result never loses the call that produced it. No extra model round-trip, no new failure mode. Set `autoCompact: false` if you'd rather run `/compact` by hand.
+
+#### Themes
+
+`ui.theme` picks one of four presets — `default` (blue accent, cyan tools), `ember` (magenta, warmer), `forest` (green), `mono` (grayscale except errors). Switch at any time with `/theme <name>`: it applies immediately and is written back to your global config.
+
+Every preset uses only the 16 ANSI colour names, never hex, so bonfire inherits your terminal's palette instead of fighting it — a solarized or gruvbox terminal gets a solarized or gruvbox bonfire for free. Semantic colours stay put across presets: green means good and red means destructive in all of them, because an approval prompt is the wrong place to get decorative.
+
+#### Outbound fetches
+
+`fetch_url` refuses private, loopback, link-local and cloud-metadata addresses by default, and re-checks every redirect hop — a public hostname pointing at `127.0.0.1` or `169.254.169.254` is caught because the guard resolves DNS rather than pattern-matching the URL. Set `security.fetch.allowPrivateNetwork: true` if you genuinely need to reach a service on your LAN, and `requireApproval: true` to be prompted before every fetch.
 
 ### Environment Variables
 
@@ -342,13 +371,18 @@ Type these inside the bonfire TUI:
 | `/sessions load <id>` | Resume a session — full ID or any unique prefix |
 | `/sessions save` | Force-save the active session |
 | `/sessions delete <id>` | Remove a session — full ID or any unique prefix |
+| `/context` | Show context-window usage for the live conversation |
+| `/compact` | Reclaim context now — trims old tool output, then drops old turns |
+| `/tools` | List every tool the model can call, built-in and MCP |
+| `/theme` | List colour themes |
+| `/theme <name>` | Switch theme — applies instantly, saved to your config |
 | `/dirs` | Show the filesystem allowlist |
 | `/add-dir <path>` | Grant access to a sibling project |
 | `/config` | Show current configuration |
 | `/reconfigure` | Interactive reconfiguration TUI |
 | `/exit`, `/quit`, `esc` | Leave |
 
-During an approval prompt: `y` = yes, `n` = no, `a` = always (shell only).
+During an approval prompt: `y` = yes, `n` = no, `a` = always for the rest of the session. `a` works for shell commands, file edits and MCP tool calls alike; `/sessions new` clears everything you've remembered.
 
 Tip: type `/` at any time to see a dropdown of every command — Tab completes, ↑/↓ moves the selection, Enter executes selected command.
 
@@ -357,6 +391,8 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 ## Other things bonfire does well
 
 **Diff-preview approvals.** Every `write_file` and `edit_file` shows a coloured unified diff and waits for `y` / `n` before touching disk. Same for `shell` — every command needs your green-light, with `a` for "always for this session." A hardcoded refusal list catches `rm -rf /`, fork bombs, `mkfs`, and friends *even after approval*.
+
+> **On the deny-list.** It is a backstop, not a sandbox. Pattern matching on a command string cannot be complete — the same destructive action can be spelled with variable expansion, a base64 pipe, an alias, or a script file, and the list will not see it. The approval prompt is the real control: read the command before you press `y`, and treat `a` ("always") as a decision you are making for the rest of the session. If you need a genuine boundary, run bonfire against a model you trust in a container or VM.
 
 **Streaming everything.** Text and tool arguments stream as they're generated. No 30-second blank stares.
 
@@ -368,9 +404,11 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 
 **Custom system prompt.** Drop a `~/.config/bonfire/system.md` (Linux/macOS) or `%APPDATA%/bonfire/system.md` (Windows) for a global override, or `.bonfire/system.md` for a project-level one. Appended to the built-in prompt by default; flip `systemPromptMode: "replace"` for full control.
 
-**Right-side tools pane.** See exactly what the model has access to. The active tool highlights green during a call.
+**`/tools`.** See exactly what the model has access to, built-ins and MCP alike.
 
 **Status line that knows what it's doing.** "Skimming bytes…" while it reads. "Pacing the codemap…" while it navigates. "Summoning the shell…" while it runs a command. Beats staring at "thinking…" for the 20th time.
+
+**Context meter.** The status line shows how much of the model's window the conversation is using. Cross the threshold and bonfire compacts history itself, telling you what it dropped — a long session on an 8K local model no longer ends in a wall of provider errors.
 
 **Filesystem allowlist.** All file tools refuse paths outside the allowed set. Symlinks inside an allowed dir can't escape it (realpath-checked). `/add-dir <path>` to extend.
 
@@ -383,12 +421,13 @@ Tip: type `/` at any time to see a dropdown of every command — Tab completes, 
 | Tool | What it does |
 | --- | --- |
 | `navigate` | Walk the codemap with one-line summaries |
-| `read_file` | Read a file from an allowed directory |
+| `search` | Regex search across the repo — gitignore-aware, skips binaries, same on every OS |
+| `read_file` | Read a file from an allowed directory — large files truncate; `offset`/`limit` page by line |
 | `write_file` | Create / overwrite — **diff-approval gated** |
 | `edit_file` | Exact-string replace — **diff-approval gated** |
-| `list_dir` | Raw directory listing |
+| `list_dir` | Directory listing, capped at 1000 entries |
 | `shell` | Run a shell command — **approval gated, deny-list applied** |
-| `fetch_url` | Fetch an http(s) URL — HTML stripped to text, 200 KB cap, 30 s timeout |
+| `fetch_url` | Fetch an http(s) URL — **SSRF-guarded**, HTML stripped to text, 200 KB cap, 30 s timeout |
 | `load_skill` | Load a named skill's full instructions on demand |
 
 ---
@@ -456,6 +495,11 @@ For llama.cpp, tool calling requires `llama-server --jinja`.
 - [x] Remote provider (any OpenAI-compatible API)
 - [x] Custom headers + `${ENV}` expansion across provider config
 - [x] Configurable codemap concurrency + mid-build checkpointing
+- [x] Project-level `bonfire.config.json` layered over the global config
+- [x] Context-window budgeting + automatic compaction (`/context`, `/compact`)
+- [x] Native cross-platform `search` tool (no shelling out to grep/findstr)
+- [x] SSRF guard on `fetch_url`, redirect hops included
+- [x] Retry with backoff on transient provider failures
 - [ ] Editable diffs (`y` / `n` / `e` opens the patch in `$EDITOR`)
 - [ ] Side-by-side model race mode
 - [ ] Local RAG tool via a small embedding model
@@ -470,9 +514,11 @@ Issues and small PRs welcome. The codebase is intentionally minimal — favour c
 
 ```
 src/
-  config.ts            # bonfire.config.json loader (OS config dir)
+  config.ts            # layered loader: defaults + OS config dir + project bonfire.config.json
   agent/
     index.ts           # runAgent, initMcp, listTools
+    context.ts         # token budgeting + mechanical history compaction
+    retry.ts           # backoff for transient provider failures
     provider.ts        # lazy provider, debug fetch with header redaction
     stream.ts          # typed normalizer for AI SDK fullStream events
     system-prompt.ts   # 3-layer prompt: built-in + global bonfire dir + .bonfire/system.md
@@ -480,7 +526,10 @@ src/
   tools/
     safe-path.ts       # realpath-aware allowlist (closes symlink escapes)
     approval.ts        # tri-state yes/no/always handler
+    remembered.ts      # session-scoped "always allow" store, shared by every gate
     shell-policy.ts    # hardcoded deny-list + per-config allow/deny patterns
+    net-guard.ts       # SSRF guard: resolves hostnames, blocks private ranges
+    search-tool.ts     # gitignore-aware regex search
     file-tools.ts, shell-tool.ts, navigate-tool.ts, fetch-tool.ts
   mcp/
     index.ts, stdio.ts, http.ts, windows.ts
@@ -498,13 +547,15 @@ src/
   providers/
     index.ts, ollama.ts, llamacpp.ts, remote.ts, types.ts
   cli/
-    bin.tsx            # entry: TTY check, MCP boot, render <App firstRun=…/>, signals
-    App.tsx            # layout + first-run hand-off into <ReconfigurePrompt/>
-    components/        # Header, Transcript, DiffPreview, ApprovalPrompt,
-                       # ModifiedFilesPanel, UsageBar, MultilineInput,
-                       # CommandSuggestions, ToolsPane, PromptBar,
+    bin.tsx            # entry: TTY check, MCP boot, banner, render <App firstRun=…/>, signals
+    App.tsx            # single-column layout + first-run hand-off into <ReconfigurePrompt/>
+    theme.ts           # presets + live theme object — the one place colour is decided
+    components/        # Banner, Transcript, ToolLine, ResultLine, DiffPreview,
+                       # ApprovalPrompt, ModifiedFilesPanel, StatusBar,
+                       # MultilineInput, CommandSuggestions, PromptBar,
                        # ReconfigurePrompt (handles both first-run + /reconfigure)
-    hooks/             # useAgentStream, useApproval, useProvider, useThinkingPhrase
+    hooks/             # useAgentStream, useApproval, useProvider,
+                       # useThinkingPhrase, useElapsed
     commands/          # slash-command registry
 ```
 

@@ -3,6 +3,7 @@ import type { TokenUsage } from '../agent/index.js';
 export type Line =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
+  | { kind: 'notice'; text: string }
   | { kind: 'tool'; name: string; args: unknown }
   | { kind: 'tool-result'; name: string; result: unknown }
   | { kind: 'error'; text: string };

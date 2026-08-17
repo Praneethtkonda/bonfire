@@ -7,6 +7,7 @@ import {
   resolveSessionId,
   saveSession,
 } from '../../session/index.js';
+import { resetChangedFiles, resetRememberedApprovals } from '../../tools/index.js';
 import type { SlashCommand } from './types.js';
 
 function errorMessage(e: unknown): string {
@@ -111,6 +112,11 @@ async function handleNew(ctx: import('./types.js').CommandContext) {
   });
   ctx.setCurrentSession(session);
   ctx.setHistory([]);
+  // A new conversation starts clean: the modified-files tally and any
+  // "always allow" grants belonged to the previous one.
+  resetChangedFiles();
+  resetRememberedApprovals();
+  ctx.clearTranscript();
   ctx.appendLines({
     kind: 'assistant',
     text: `New session ${session.id} created (cwd: ${ctx.cwd})`,
@@ -132,6 +138,9 @@ async function handleLoad(ctx: import('./types.js').CommandContext, sub: string)
   }
   ctx.setCurrentSession(session);
   ctx.setHistory(session.history);
+  resetChangedFiles();
+  resetRememberedApprovals();
+  ctx.clearTranscript();
   ctx.appendLines({
     kind: 'assistant',
     text: `Loaded session ${session.id} · ${session.history.length} messages · cwd: ${session.cwd}`,

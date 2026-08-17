@@ -1,10 +1,14 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { CommandSuggestion } from '../commands/index.js';
+import { theme, glyphs } from '../theme.js';
 
-const MAX_VISIBLE = 10;
-const VISIBLE_START = 0;
+const MAX_VISIBLE = 8;
 
+/**
+ * Slash-command palette shown above the input. Borderless and dim so it reads
+ * as an overlay on the prompt rather than another panel competing with it.
+ */
 export function CommandSuggestions({
   items,
   selected,
@@ -13,35 +17,42 @@ export function CommandSuggestions({
   selected: number;
 }) {
   if (items.length === 0) return null;
-  
-  const startIdx = Math.max(0, selected - 2);
+
+  // Keep the cursor in view without letting the window run past the end.
+  const startIdx = Math.min(
+    Math.max(0, selected - 2),
+    Math.max(0, items.length - MAX_VISIBLE),
+  );
   const endIdx = Math.min(items.length, startIdx + MAX_VISIBLE);
-  const shown = items.slice(startIdx, endIdx);
   const triggerWidth = Math.max(...items.map((s) => s.trigger.length));
-  
+
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor="cyan"
-      paddingX={1}
-      marginTop={1}
-    >
-      {shown.map((_, idx) => {
-        const itemIdx = startIdx + idx;
-        const isSel = itemIdx === selected;
-        const s = items[itemIdx];
+    <Box flexDirection="column" paddingX={1} marginBottom={1}>
+      {items.slice(startIdx, endIdx).map((s, idx) => {
+        const isSel = startIdx + idx === selected;
         return (
-          <Text key={s.trigger} color={isSel ? 'black' : 'cyan'} backgroundColor={isSel ? 'cyan' : undefined}>
-            {isSel ? '▸ ' : '  '}
-            {s.trigger.padEnd(triggerWidth)}  <Text dimColor={!isSel}>{s.description}</Text>
+          <Text key={s.trigger}>
+            <Text color={isSel ? theme.accent : theme.muted}>
+              {isSel ? `${glyphs.selected} ` : '  '}
+            </Text>
+            <Text color={isSel ? theme.accent : theme.body} bold={isSel}>
+              {s.trigger.padEnd(triggerWidth)}
+            </Text>
+            <Text color={theme.muted} dimColor>
+              {'  '}
+              {s.description}
+            </Text>
           </Text>
         );
       })}
-      {items.length > MAX_VISIBLE && endIdx < items.length ? (
-        <Text dimColor>  … {items.length - endIdx} more</Text>
+      {endIdx < items.length ? (
+        <Text color={theme.muted} dimColor>
+          {'  '}… {items.length - endIdx} more
+        </Text>
       ) : null}
-      <Text dimColor>  ↑↓ to move · Tab to complete · Enter to run</Text>
+      <Text color={theme.muted} dimColor>
+        {'  '}↑↓ navigate · tab complete · enter run
+      </Text>
     </Box>
   );
 }

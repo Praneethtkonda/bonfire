@@ -1,5 +1,6 @@
 import { isStreamableHttpMcp, loadConfig, type McpServerConfig } from '../config.js';
 import { requestApproval } from '../tools/approval.js';
+import { isApprovalRemembered, rememberApproval } from '../tools/remembered.js';
 import { openStdio } from './stdio.js';
 import { openStreamableHttp } from './http.js';
 import type { LoadedMcp, OpenedClient } from './types.js';
@@ -27,8 +28,11 @@ export function gateTool(name: string, tool: unknown): unknown {
   return {
     ...t,
     execute: async (args: unknown, ctx?: unknown) => {
-      const decision = await requestApproval({ tool: 'mcp', name, args });
-      if (decision === 'no') return { status: 'skipped', reason: 'denied by user' };
+      if (!isApprovalRemembered('mcp', name)) {
+        const decision = await requestApproval({ tool: 'mcp', name, args });
+        if (decision === 'no') return { status: 'skipped', reason: 'denied by user' };
+        if (decision === 'always') rememberApproval('mcp', name);
+      }
       return original(args, ctx);
     },
   };

@@ -22,21 +22,44 @@
     "shell": {
       "requireApproval": true,
       "allowedCommands": [],
-      "deniedCommands": []
+      "deniedCommands": [],
+      "timeoutMs": 60000
     },
-    "mcpRequireApproval": false
+    "mcpRequireApproval": false,
+    "fetch": {
+      "allowPrivateNetwork": false,
+      "requireApproval": false
+    }
+  },
+  "codemap": {
+    "concurrency": 3
+  },
+  "context": {
+    "maxTokens": 8192,
+    "compactThreshold": 0.75,
+    "autoCompact": true
   },
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
     },
     "github": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxx"
       }
     }
+  },
+  "ui": {
+    "theme": "default"
   }
 }

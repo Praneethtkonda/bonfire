@@ -1,12 +1,19 @@
 import { editFileTool, listDirTool, readFileTool, writeFileTool } from './file-tools.js';
 import { shellTool } from './shell-tool.js';
 import { navigateTool } from './navigate-tool.js';
+import { searchTool } from './search-tool.js';
 import { fetchUrlTool } from './fetch-tool.js';
 import { loadSkillTool } from '../skills/index.js';
 
 export type { ApprovalRequest, ApprovalDecision, ApprovalHandler } from './approval.js';
 export { setApprovalHandler } from './approval.js';
-export { changedFiles } from './changed-files.js';
+export {
+  rememberApproval,
+  isApprovalRemembered,
+  resetRememberedApprovals,
+  type ApprovalScope,
+} from './remembered.js';
+export { changedFiles, resetChangedFiles } from './changed-files.js';
 export type { FileChange } from './changed-files.js';
 export { addAllowedDir, getAllowedDirs } from './safe-path.js';
 
@@ -15,6 +22,7 @@ export const tools = {
   write_file: writeFileTool,
   edit_file: editFileTool,
   navigate: navigateTool,
+  search: searchTool,
   list_dir: listDirTool,
   shell: shellTool,
   fetch_url: fetchUrlTool,
@@ -32,6 +40,7 @@ const BUILTIN_DESCRIPTIONS: Record<keyof typeof tools, string> = {
   write_file: 'Create / overwrite a file (diff approval gated)',
   edit_file: 'Replace an exact string in a file (diff approval gated)',
   navigate: 'Walk the codemap with one-line summaries',
+  search: 'Regex search across repo contents (gitignore-aware)',
   list_dir: 'List directory entries (raw, no summaries)',
   shell: 'Run a shell command (approval gated, deny-list applied)',
   fetch_url: 'Fetch an http(s) URL and return the response body (HTML stripped to text)',

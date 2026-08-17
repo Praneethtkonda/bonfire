@@ -1,6 +1,7 @@
 export type ApprovalRequest =
   | { tool: 'write_file' | 'edit_file'; path: string; diff: string }
   | { tool: 'shell'; command: string; cwd: string }
+  | { tool: 'fetch'; url: string }
   | { tool: 'mcp'; name: string; args: unknown };
 
 export type ApprovalDecision = 'yes' | 'no' | 'always';

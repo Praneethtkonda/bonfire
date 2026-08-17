@@ -6,14 +6,32 @@ export interface TokenUsage {
   total: number;
 }
 
+export interface ContextInfo {
+  used: number;
+  max: number;
+  ratio: number;
+}
+
+export interface CompactionInfo {
+  droppedMessages: number;
+  trimmedToolOutputs: number;
+  tokensBefore: number;
+  tokensAfter: number;
+}
+
 export interface AgentEvent {
   type:
     | 'text'
+    | 'reasoning'
     | 'tool-input-start'
     | 'tool-input-delta'
     | 'tool-call'
     | 'tool-result'
+    | 'tool-error'
     | 'usage'
+    | 'context'
+    | 'compaction'
+    | 'abort'
     | 'done'
     | 'error';
   text?: string;
@@ -24,6 +42,8 @@ export interface AgentEvent {
   result?: unknown;
   error?: string;
   usage?: TokenUsage;
+  context?: ContextInfo;
+  compaction?: CompactionInfo;
 }
 
 /**
@@ -67,6 +87,11 @@ export function normalizePart(raw: RawPart): AgentEvent | null {
   switch (raw.type) {
     case 'text-delta':
       return { type: 'text', text: raw.text };
+    case 'reasoning-delta':
+      // Reasoning models (qwen3, deepseek-r1) stream their scratchpad here.
+      // Surfaced separately so the UI can dim it rather than mixing it into
+      // the answer.
+      return { type: 'reasoning', text: raw.text ?? raw.delta ?? '' };
     case 'tool-input-start':
     case 'tool-call-streaming-start':
       return {
@@ -95,6 +120,16 @@ export function normalizePart(raw: RawPart): AgentEvent | null {
         toolCallId: raw.toolCallId,
         result: raw.output ?? raw.result,
       };
+    case 'tool-error':
+      // A tool that throws used to vanish from the transcript entirely.
+      return {
+        type: 'tool-error',
+        toolName: raw.toolName,
+        toolCallId: raw.toolCallId,
+        error: formatProviderError(raw.error),
+      };
+    case 'abort':
+      return { type: 'abort' };
     case 'finish': {
       const usage = normalizeUsage(raw.totalUsage ?? raw.usage);
       return usage ? { type: 'usage', usage } : null;

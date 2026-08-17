@@ -5,3 +5,6 @@ dist/
 debug.log
 *.bkp.json
 
+
+# project-local config (use bonfire.config.example.json as the template)
+bonfire.config.json

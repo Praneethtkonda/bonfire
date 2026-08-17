@@ -1,4 +1,5 @@
 import { loadConfig } from '../config.js';
+import { isApprovalRemembered, rememberApproval } from './remembered.js';
 
 /**
  * Hardcoded refusal patterns. These commands cannot be approved — they're
@@ -62,15 +63,13 @@ export function resetShellPolicyCache() {
 }
 
 /** In-session pre-approvals — the user picked "always" for this exact command. */
-const sessionAllow = new Set<string>();
-
 export function rememberShellApproval(command: string) {
-  sessionAllow.add(command.trim());
+  rememberApproval('shell', command);
 }
 
 export function isShellPreApproved(command: string, policy: ShellPolicy): boolean {
   const c = command.trim();
-  if (sessionAllow.has(c)) return true;
+  if (isApprovalRemembered('shell', c)) return true;
   return policy.allowedPatterns.some((re) => re.test(c));
 }
 

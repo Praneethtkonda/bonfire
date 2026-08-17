@@ -2,45 +2,85 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { ApprovalRequest } from '../../tools/index.js';
 import { DiffPreview } from './DiffPreview.js';
+import { theme, glyphs } from '../theme.js';
 
+/**
+ * Approval card. One rounded panel per request with a title row naming the
+ * action and the payload beneath it, matching the way Copilot CLI surfaces a
+ * pending command.
+ */
 export function ApprovalPrompt({ request }: { request: ApprovalRequest }) {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={theme.warn}
+      paddingX={1}
+      marginTop={1}
+    >
+      <Title request={request} />
+      <Body request={request} />
+    </Box>
+  );
+}
+
+function Title({ request }: { request: ApprovalRequest }) {
+  const label =
+    request.tool === 'shell'
+      ? 'Run shell command'
+      : request.tool === 'mcp'
+        ? `Call MCP tool ${request.name}`
+        : request.tool === 'fetch'
+          ? 'Fetch URL'
+          : request.tool === 'write_file'
+            ? `Write ${request.path}`
+            : `Edit ${request.path}`;
+  return (
+    <Text>
+      <Text color={theme.warn} bold>
+        {glyphs.warn}{' '}
+      </Text>
+      <Text bold>{label}</Text>
+    </Text>
+  );
+}
+
+function Body({ request }: { request: ApprovalRequest }) {
   if (request.tool === 'shell') {
     return (
-      <Box flexDirection="column" marginTop={1}>
-        <Text color="yellow" bold>
-          shell → {request.cwd}
+      <Box flexDirection="column" paddingX={1}>
+        <Text color={theme.body}>$ {request.command}</Text>
+        <Text color={theme.muted} dimColor>
+          in {request.cwd}
         </Text>
-        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text color="white">$ {request.command}</Text>
-        </Box>
       </Box>
     );
   }
   if (request.tool === 'mcp') {
     return (
-      <Box flexDirection="column" marginTop={1}>
-        <Text color="yellow" bold>
-          mcp → {request.name}
-        </Text>
-        <Box borderStyle="round" borderColor="yellow" paddingX={1}>
-          <Text color="white">{JSON.stringify(request.args, null, 2)}</Text>
-        </Box>
+      <Box paddingX={1}>
+        <Text color={theme.muted}>{JSON.stringify(request.args, null, 2)}</Text>
       </Box>
     );
   }
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color="yellow" bold>
-        {request.tool} → {request.path}
-      </Text>
-      <DiffPreview diff={request.diff} />
-    </Box>
-  );
+  if (request.tool === 'fetch') {
+    return (
+      <Box paddingX={1}>
+        <Text color={theme.body}>{request.url}</Text>
+      </Box>
+    );
+  }
+  return <DiffPreview diff={request.diff} />;
 }
 
 export function approvalHelpText(request: ApprovalRequest): string {
-  if (request.tool === 'shell') {
-    return 'Run command? y = yes (enter), a = always (this session), n = no (esc)';
-  }
-  return 'Apply changes? y = yes (enter), n = no (esc)';
+  const scope =
+    request.tool === 'shell'
+      ? 'this command'
+      : request.tool === 'mcp'
+        ? 'this tool'
+        : request.tool === 'fetch'
+          ? 'this host'
+          : 'this file';
+  return `y accept · a always for ${scope} · n reject (esc)`;
 }

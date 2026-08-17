@@ -13,6 +13,7 @@ import {
   setApprovalHandler,
   type ApprovalDecision,
 } from '../../src/tools/approval.js';
+import { resetRememberedApprovals } from '../../src/tools/remembered.js';
 
 interface ExecTool<A> {
   execute?: (args: A, ctx?: unknown) => Promise<any>;
@@ -172,5 +173,73 @@ describe('listDirTool', () => {
     await expect(e<{ path: string }>(listDirTool)!({ path: '/etc' })).rejects.toThrow(
       /not in any allowed directory/,
     );
+  });
+});
+
+describe('readFileTool paging and caps', () => {
+  it('returns a line range for offset/limit', async () => {
+    const path = join(scratch, 'paged.txt');
+    await writeFile(path, ['one', 'two', 'three', 'four', 'five'].join('\n'), 'utf-8');
+    const out = await e<{ path: string; offset?: number; limit?: number }>(readFileTool)!({
+      path,
+      offset: 2,
+      limit: 2,
+    });
+    expect(out.content).toBe('two\nthree');
+    expect(out.truncated).toBe(true);
+  });
+
+  it('reads to the end when only offset is given', async () => {
+    const path = join(scratch, 'paged2.txt');
+    await writeFile(path, ['a', 'b', 'c'].join('\n'), 'utf-8');
+    const out = await e<{ path: string; offset?: number }>(readFileTool)!({ path, offset: 3 });
+    expect(out.content).toBe('c');
+  });
+
+  it('truncates a very large file and explains how to page', async () => {
+    const path = join(scratch, 'huge.txt');
+    await writeFile(path, 'x'.repeat(300 * 1024), 'utf-8');
+    const out = await e<{ path: string }>(readFileTool)!({ path });
+    expect(out.truncated).toBe(true);
+    expect(out.content.length).toBeLessThan(300 * 1024);
+    expect(out.note).toMatch(/offset\/limit/);
+  });
+
+  it('does not mark a small whole-file read as truncated', async () => {
+    const path = join(scratch, 'small.txt');
+    await writeFile(path, 'tiny', 'utf-8');
+    const out = await e<{ path: string }>(readFileTool)!({ path });
+    expect(out.truncated).toBe(false);
+  });
+});
+
+describe('listDirTool caps', () => {
+  it('caps the number of entries and reports truncation', async () => {
+    const dir = join(scratch, 'many');
+    await mkdir(dir, { recursive: true });
+    await Promise.all(
+      Array.from({ length: 1100 }, (_, i) => writeFile(join(dir, `f${i}.txt`), '', 'utf-8')),
+    );
+    const out = await e<{ path: string }>(listDirTool)!({ path: dir });
+    expect(out.items.length).toBe(1000);
+    expect(out.truncated).toBe(true);
+  });
+});
+
+describe('remembered file approvals', () => {
+  it('stops prompting after the user answers "always"', async () => {
+    resetRememberedApprovals();
+    let prompts = 0;
+    setApprovalHandler(async () => {
+      prompts++;
+      return 'always' as ApprovalDecision;
+    });
+    const path = join(scratch, 'remember.txt');
+    const write = e<{ path: string; content: string }>(writeFileTool)!;
+    await write({ path, content: 'one' });
+    await write({ path, content: 'two' });
+    expect(prompts).toBe(1);
+    expect(await readFile(path, 'utf-8')).toBe('two');
+    resetRememberedApprovals();
   });
 });

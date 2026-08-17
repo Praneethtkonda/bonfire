@@ -50,25 +50,26 @@
     "access": "public"
   },
   "dependencies": {
-    "@ai-sdk/mcp": "^1.0.36",
-    "@ai-sdk/openai-compatible": "^2.0.41",
-    "ai": "^6.0.0",
+    "@ai-sdk/mcp": "^2.0.32",
+    "@ai-sdk/openai-compatible": "^3.0.30",
+    "ai": "^7.0.66",
     "diff": "^9.0.0",
-    "execa": "^9.5.2",
-    "ignore": "^7.0.5",
-    "ink": "^7.0.1",
+    "execa": "^10.0.1",
+    "ignore": "^7.0.6",
+    "ink": "^7.1.1",
     "ink-spinner": "^5.0.0",
-    "ollama-ai-provider-v2": "^3.5.0",
-    "react": "^19.2.5",
-    "zod": "^4.0.16"
+    "ollama-ai-provider-v2": "^4.0.1",
+    "react": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/diff": "^7.0.2",
-    "@types/node": "^25.6.0",
-    "@types/react": "^19.2.14",
+    "@types/diff": "^8.0.0",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "ink-testing-library": "^4.0.0",
     "tsup": "^8.5.1",
-    "tsx": "^4.19.2",
-    "typescript": "^6.0.3",
-    "vitest": "^2.1.8"
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

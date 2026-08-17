@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { DEFAULT_THEME, isThemeName, themeNames } from './cli/theme.js';
 
 export interface StdioMcpServerConfig {
   type?: 'stdio';
@@ -63,6 +64,21 @@ export const DEFAULT_CONFIG: NanoConfig = {
       requireApproval: true,
     },
     mcpRequireApproval: false,
+    fetch: {
+      allowPrivateNetwork: false,
+      requireApproval: false,
+    },
+  },
+  codemap: {
+    concurrency: 3,
+  },
+  context: {
+    maxTokens: 8192,
+    compactThreshold: 0.75,
+    autoCompact: true,
+  },
+  ui: {
+    theme: DEFAULT_THEME,
   },
 };
 
@@ -73,6 +89,13 @@ export function getConfigPath(): string {
     ? process.env.APPDATA || resolve(home, 'AppData', 'Roaming')
     : resolve(home, '.config');
   return resolve(baseDir, 'bonfire', 'config.json');
+}
+
+/** Project-local config file, layered on top of the global one. */
+export const PROJECT_CONFIG_FILENAME = 'bonfire.config.json';
+
+export function getProjectConfigPath(cwd: string = process.cwd()): string {
+  return resolve(cwd, PROJECT_CONFIG_FILENAME);
 }
 
 export interface OllamaProviderConfig {
@@ -118,6 +141,39 @@ export interface SecurityConfig {
   shell?: ShellSecurityConfig;
   /** Require approval before MCP tool calls (default: false). */
   mcpRequireApproval?: boolean;
+  fetch?: FetchSecurityConfig;
+}
+
+export interface FetchSecurityConfig {
+  /**
+   * Allow fetch_url to reach private / loopback / link-local addresses.
+   * Off by default: it blocks SSRF into cloud metadata endpoints and
+   * services bound to localhost. (default: false)
+   */
+  allowPrivateNetwork?: boolean;
+  /** Require approval before every fetch_url call (default: false). */
+  requireApproval?: boolean;
+}
+
+export interface ContextConfig {
+  /**
+   * Model context window in tokens. Used to budget history and to drive the
+   * context meter in the UI. Default: 8192 — the llama.cpp server default,
+   * deliberately conservative for local models.
+   */
+  maxTokens?: number;
+  /**
+   * Fraction of the window (0–1) at which history is auto-compacted before
+   * the next request. Default: 0.75.
+   */
+  compactThreshold?: number;
+  /** Set false to disable automatic compaction entirely. Default: true. */
+  autoCompact?: boolean;
+}
+
+export interface UiConfig {
+  /** Name of a built-in theme preset. See `/theme` for the list. */
+  theme?: string;
 }
 
 export interface CodemapConfig {
@@ -134,55 +190,71 @@ export interface NanoConfig {
   systemPromptMode?: 'append' | 'replace';
   security?: SecurityConfig;
   codemap?: CodemapConfig;
+  context?: ContextConfig;
+  ui?: UiConfig;
 }
 
 let cached: NanoConfig | null = null;
 
-export async function loadConfig(): Promise<NanoConfig> {
-  if (cached) return cached;
-  const path = getConfigPath();
+async function readJsonIfExists(path: string): Promise<Partial<NanoConfig> | null> {
   try {
-    const raw = await readFile(path, 'utf-8');
-    const userConfig = JSON.parse(raw) as NanoConfig;
-    cached = mergeConfig(DEFAULT_CONFIG, userConfig);
+    return JSON.parse(await readFile(path, 'utf-8')) as Partial<NanoConfig>;
   } catch {
-    cached = DEFAULT_CONFIG;
+    return null;
   }
+}
+
+/**
+ * Layered config, lowest → highest precedence:
+ *   1. DEFAULT_CONFIG
+ *   2. global config  (~/.config/bonfire/config.json | %APPDATA%\bonfire\config.json)
+ *   3. project config (<cwd>/bonfire.config.json)
+ *
+ * Each layer is deep-merged over the one below it, so a project file that only
+ * sets `provider.ollama.model` keeps the global `baseURL`.
+ */
+export async function loadConfig(cwd: string = process.cwd()): Promise<NanoConfig> {
+  if (cached) return cached;
+  const global = await readJsonIfExists(getConfigPath());
+  const project = await readJsonIfExists(getProjectConfigPath(cwd));
+  let merged = DEFAULT_CONFIG;
+  if (global) merged = mergeConfig(merged, global);
+  if (project) merged = mergeConfig(merged, project);
+  cached = merged;
   return cached;
 }
 
-function mergeConfig(defaults: NanoConfig, user: Partial<NanoConfig>): NanoConfig {
-  const result: NanoConfig = { ...defaults };
-  
-  if (user.provider) {
-    result.provider = { ...defaults.provider, ...user.provider };
-    if (user.provider.ollama && defaults.provider?.ollama) {
-      result.provider.ollama = { ...defaults.provider.ollama, ...user.provider.ollama };
-    }
-    if (user.provider['llama.cpp'] && defaults.provider?.['llama.cpp']) {
-      result.provider['llama.cpp'] = { ...defaults.provider['llama.cpp'], ...user.provider['llama.cpp'] };
-    }
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Recursively merge `user` over `defaults`. Plain objects merge key-by-key;
+ * arrays and scalars are replaced wholesale. `undefined` on the user side is
+ * ignored so an explicitly-absent key never erases a default.
+ *
+ * Written generically on purpose: the previous hand-rolled version enumerated
+ * known keys and silently dropped everything else (`codemap` in particular).
+ */
+export function mergeConfig(defaults: NanoConfig, user: Partial<NanoConfig>): NanoConfig {
+  return deepMerge(
+    defaults as Record<string, unknown>,
+    user as Record<string, unknown>,
+  ) as NanoConfig;
+}
+
+function deepMerge(
+  defaults: Record<string, unknown>,
+  user: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...defaults };
+  for (const [key, value] of Object.entries(user)) {
+    if (value === undefined) continue;
+    const base = out[key];
+    out[key] =
+      isPlainObject(base) && isPlainObject(value) ? deepMerge(base, value) : value;
   }
-  
-  if (user.mcpServers) {
-    result.mcpServers = { ...defaults.mcpServers, ...user.mcpServers };
-  }
-  
-  if (user.security) {
-    result.security = { ...defaults.security, ...user.security };
-    if (user.security.shell && defaults.security?.shell) {
-      result.security.shell = { ...defaults.security.shell, ...user.security.shell };
-    }
-  }
-  
-  if (user.systemPrompt !== undefined) {
-    result.systemPrompt = user.systemPrompt;
-  }
-  if (user.systemPromptMode) {
-    result.systemPromptMode = user.systemPromptMode;
-  }
-  
-  return result;
+  return out;
 }
 
 export async function saveConfig(config: NanoConfig): Promise<void> {
@@ -268,6 +340,46 @@ export function validateConfig(config: NanoConfig): ValidationError[] {
   if (config.security?.shell?.deniedCommands) {
     if (!Array.isArray(config.security.shell.deniedCommands)) {
       errors.push({ field: 'security.shell.deniedCommands', message: 'Must be an array' });
+    }
+  }
+
+  const concurrency = config.codemap?.concurrency;
+  if (concurrency !== undefined) {
+    if (typeof concurrency !== 'number' || !Number.isFinite(concurrency) || concurrency < 1) {
+      errors.push({
+        field: 'codemap.concurrency',
+        message: 'Must be a number >= 1',
+      });
+    }
+  }
+
+  const maxTokens = config.context?.maxTokens;
+  if (maxTokens !== undefined) {
+    if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens) || maxTokens < 1024) {
+      errors.push({
+        field: 'context.maxTokens',
+        message: 'Must be a number >= 1024',
+      });
+    }
+  }
+
+  const threshold = config.context?.compactThreshold;
+  if (threshold !== undefined) {
+    if (typeof threshold !== 'number' || !(threshold > 0 && threshold <= 1)) {
+      errors.push({
+        field: 'context.compactThreshold',
+        message: 'Must be a number between 0 and 1',
+      });
+    }
+  }
+
+  const themeName = config.ui?.theme;
+  if (themeName !== undefined) {
+    if (typeof themeName !== 'string' || !isThemeName(themeName)) {
+      errors.push({
+        field: 'ui.theme',
+        message: `Must be one of: ${themeNames().join(', ')}`,
+      });
     }
   }
 

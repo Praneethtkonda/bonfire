@@ -1,19 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchUrlTool } from '../../src/tools/fetch-tool.js';
+import { fetchUrl } from '../../src/tools/fetch-tool.js';
 
 interface ExecArgs {
   url: string;
   raw?: boolean;
 }
 
-interface MaybeExec {
-  execute?: (args: ExecArgs, ctx?: unknown) => Promise<any>;
-}
-
+// These tests exercise body handling, not the network guard, so DNS is stubbed
+// to a public address and the policy is pinned. Guard behaviour has its own
+// suite in tests/tools/net-guard.test.ts.
 async function exec(args: ExecArgs): Promise<any> {
-  const t = fetchUrlTool as unknown as MaybeExec;
-  if (!t.execute) throw new Error('fetchUrlTool has no execute');
-  return t.execute(args);
+  return fetchUrl(args, {
+    resolveHost: async () => ['93.184.216.34'],
+    policy: { allowPrivateNetwork: false, requireApproval: false },
+  });
 }
 
 function htmlResponse(body: string, status = 200) {

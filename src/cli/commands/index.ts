@@ -7,6 +7,9 @@ import { systemCommand } from './system.js';
 import { skillsCommand } from './skills.js';
 import { initCommand } from './init.js';
 import { configCommand } from './config.js';
+import { compactCommand, contextCommand } from './context.js';
+import { toolsCommand } from './tools.js';
+import { themeCommand } from './theme.js';
 import { reconfigureCommand } from './reconfigure.js';
 import { makeHelpCommand } from './help.js';
 
@@ -22,6 +25,10 @@ const baseCommands: SlashCommand[] = [
   systemCommand,
   skillsCommand,
   configCommand,
+  contextCommand,
+  compactCommand,
+  toolsCommand,
+  themeCommand,
   reconfigureCommand,
 ];
 

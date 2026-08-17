@@ -1,9 +1,13 @@
 import React from 'react';
 import { render } from 'ink';
 import { readFile } from 'node:fs/promises';
-import { initMcp, shutdownMcp } from '../agent/index.js';
-import { getConfigPath } from '../config.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { initMcp, shutdownMcp, describeProvider } from '../agent/index.js';
+import { getConfigPath, loadConfig } from '../config.js';
+import { setTheme } from './theme.js';
 import { App } from './App.js';
+import { Banner } from './components/Banner.js';
 
 if (!process.stdin.isTTY) {
   const hint =
@@ -14,9 +18,15 @@ if (!process.stdin.isTTY) {
   process.exit(1);
 }
 
-const mcpToolCount = await initMcp();
-if (mcpToolCount > 0) {
-  console.error(`[mcp] ${mcpToolCount} tool(s) available`);
+async function readVersion(): Promise<string> {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    // dist/cli/bin.js → ../../package.json; src/cli/bin.tsx → ../../package.json
+    const raw = await readFile(resolve(here, '..', '..', 'package.json'), 'utf-8');
+    return (JSON.parse(raw) as { version?: string }).version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
 }
 
 async function configExists(): Promise<boolean> {
@@ -28,14 +38,35 @@ async function configExists(): Promise<boolean> {
   }
 }
 
+const mcpToolCount = await initMcp();
+if (mcpToolCount > 0) {
+  console.error(`[mcp] ${mcpToolCount} tool(s) available`);
+}
+
 const firstRun = !(await configExists());
+const version = await readVersion();
+
+// Apply the saved theme before the first paint, so the banner and the app
+// agree on colours. An unknown name leaves the default in place.
+const savedTheme = (await loadConfig().catch(() => null))?.ui?.theme;
+if (savedTheme) setTheme(savedTheme);
+
+// The banner is written once, above the interactive app, so it scrolls away
+// with the rest of the history instead of being repainted every frame.
+if (!firstRun) {
+  const providerLabel = await describeProvider().catch(() => 'no provider');
+  const banner = render(
+    <Banner providerLabel={providerLabel} cwd={process.cwd()} version={version} />,
+  );
+  banner.unmount();
+}
 
 // Enable the Kitty keyboard protocol via `mode: 'enabled'` (a push, not a
 // probe). Modern terminals (kitty, Ghostty, WezTerm, recent iTerm2) honour
 // the set command and start sending CSI-u sequences for Shift+Enter; older
 // terminals silently ignore the unknown CSI sequence. Crucially, there is no
 // query — so nothing can leak as visible output the way `mode: 'auto'` does.
-const app = render(<App firstRun={firstRun} />, {
+const app = render(<App firstRun={firstRun} version={version} />, {
   kittyKeyboard: { mode: 'enabled', flags: ['disambiguateEscapeCodes'] },
 });
 
@@ -48,7 +79,6 @@ process.stdout.write('\x1b[?2004h');
 const cleanup = async () => {
   process.stdout.write('\x1b[?2004l');
   app.unmount();
-  process.stdout.write('\x1b[2J\x1b[0f');
   await shutdownMcp();
   process.exit(0);
 };

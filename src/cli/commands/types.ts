@@ -7,7 +7,11 @@ export interface CommandContext {
   currentSession: Session | null;
   setCurrentSession: (s: Session | null) => void;
   setHistory: (h: import('ai').ModelMessage[]) => void;
+  /** Current conversation history — needed by commands that reshape it. */
+  getHistory: () => import('ai').ModelMessage[];
   appendLines: (...lines: Line[]) => void;
+  /** Wipe the visible transcript and per-conversation counters. */
+  clearTranscript: () => void;
   setBusy: (b: boolean) => void;
   setCodemapProgress: (p: CodemapProgress | null) => void;
   /**

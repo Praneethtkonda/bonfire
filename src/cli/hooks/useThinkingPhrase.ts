@@ -3,25 +3,28 @@ import { useEffect, useState } from 'react';
 const ROTATE_MS = 5000;
 
 const GENERIC = [
-  'thinking…',
-  'pondering…',
-  'cogitating…',
-  'consulting the spirits…',
-  'sharpening pencils…',
-  'rummaging through memory…',
-  'untangling the yak…',
-  'reading tea leaves…',
-  'doing the math…',
-  'searching for the right cliché…',
+  'Thinking…',
+  'Pondering…',
+  'Cogitating…',
+  'Consulting the spirits…',
+  'Sharpening pencils…',
+  'Rummaging through memory…',
+  'Untangling the yak…',
+  'Reading tea leaves…',
+  'Doing the math…',
+  'Searching for the right cliché…',
 ];
 
 const PER_TOOL: Record<string, string[]> = {
-  read_file: ['skimming bytes…', 'cracking open the file…', 'reading between the lines…'],
-  write_file: ['drafting…', 'scribbling…', 'committing pixels to disk…'],
-  edit_file: ['surgical edit in progress…', 'rewriting reality…', 'patching…'],
-  navigate: ['pacing the codemap…', 'reading the map…', 'wayfinding…'],
-  list_dir: ['rummaging through the drawer…', 'taking inventory…', 'listing entries…'],
-  shell: ['summoning the shell…', 'ssh-ing into the machine…', 'consulting the daemon…'],
+  read_file: ['Skimming bytes…', 'Cracking open the file…', 'Reading between the lines…'],
+  write_file: ['Drafting…', 'Scribbling…', 'Committing pixels to disk…'],
+  edit_file: ['Performing surgery…', 'Rewriting reality…', 'Patching…'],
+  navigate: ['Pacing the codemap…', 'Reading the map…', 'Wayfinding…'],
+  search: ['Combing the haystack…', 'Grepping without grep…', 'Hunting for matches…'],
+  list_dir: ['Rummaging through the drawer…', 'Taking inventory…', 'Listing entries…'],
+  shell: ['Summoning the shell…', 'Consulting the daemon…', 'Running it…'],
+  fetch_url: ['Dialling out…', 'Fetching…', 'Waiting on the wire…'],
+  load_skill: ['Reading the manual…', 'Loading the playbook…'],
 };
 
 function pick(list: string[]): string {

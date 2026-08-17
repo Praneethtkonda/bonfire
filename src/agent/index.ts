@@ -5,10 +5,26 @@ import { getProvider, describeProvider, resetProvider } from './provider.js';
 import { normalizePart, type AgentEvent, type TokenUsage } from './stream.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { formatProviderError } from './error-format.js';
+import {
+  autoCompact,
+  estimateTokens,
+  estimateHistoryTokens,
+  getContextSettings,
+  type ContextStatus,
+} from './context.js';
+import { withRetry } from './retry.js';
 
 export type { AgentEvent, TokenUsage };
 export type { ToolDescriptor };
+export type { ContextStatus };
 export { describeProvider, resetProvider };
+export {
+  compactHistory,
+  contextStatus,
+  estimateHistoryTokens,
+  estimateTokens,
+  getContextSettings,
+} from './context.js';
 
 let mcpState: LoadedMcp | null = null;
 
@@ -38,36 +54,84 @@ export async function* runAgent(
   userInput: string,
   options?: { signal?: AbortSignal },
 ): AsyncGenerator<AgentEvent> {
-  const messages: ModelMessage[] = [...history, { role: 'user', content: userInput }];
-
   let streamErrored = false;
 
   try {
     const provider = await getProvider();
+    const system = await buildSystemPrompt();
+    const systemTokens = estimateTokens(system);
+    const settings = await getContextSettings();
+
+    // Compact *before* appending the new input so the user's own message is
+    // never the thing that gets dropped.
+    const compaction = autoCompact(history, settings, systemTokens);
+    if (compaction.changed) {
+      yield {
+        type: 'compaction',
+        compaction: {
+          droppedMessages: compaction.droppedMessages,
+          trimmedToolOutputs: compaction.trimmedToolOutputs,
+          tokensBefore: compaction.tokensBefore,
+          tokensAfter: compaction.tokensAfter,
+        },
+      };
+    }
+
+    const messages: ModelMessage[] = [
+      ...compaction.messages,
+      { role: 'user', content: userInput },
+    ];
+
+    yield {
+      type: 'context',
+      context: {
+        used: estimateHistoryTokens(messages) + systemTokens,
+        max: settings.maxTokens,
+        ratio:
+          settings.maxTokens > 0
+            ? (estimateHistoryTokens(messages) + systemTokens) / settings.maxTokens
+            : 0,
+      },
+    };
+
     const disableBuiltins = process.env.BONFIRE_DISABLE_BUILTINS === '1';
     const mergedTools = {
       ...(disableBuiltins ? {} : builtinTools),
       ...(mcpState?.tools ?? {}),
     };
-    const result = streamText({
-      model: provider.model,
-      system: await buildSystemPrompt(),
-      messages,
-      tools: mergedTools,
-      stopWhen: stepCountIs(100),
-      temperature: 0.2,
-      abortSignal: options?.signal,
-      // Suppress the AI SDK's default console.error of the full stack. The
-      // user-facing message comes from the `error` event on `fullStream`,
-      // which we route through formatProviderError below. Keep the raw error
-      // available when BONFIRE_DEBUG=1 for diagnostics.
-      onError: ({ error }) => {
-        streamErrored = true;
-        if (process.env.BONFIRE_DEBUG === '1') {
-          console.error('[bonfire] streamText error:', error);
-        }
+
+    // Only the initial connection is retried. Once tokens are streaming a
+    // retry would replay text the user has already seen.
+    const result = await withRetry(
+      async () =>
+        streamText({
+          model: provider.model,
+          system,
+          messages,
+          tools: mergedTools,
+          stopWhen: stepCountIs(100),
+          temperature: 0.2,
+          abortSignal: options?.signal,
+          // Suppress the AI SDK's default console.error of the full stack. The
+          // user-facing message comes from the `error` event on `fullStream`,
+          // which we route through formatProviderError below. Keep the raw error
+          // available when BONFIRE_DEBUG=1 for diagnostics.
+          onError: ({ error }) => {
+            streamErrored = true;
+            if (process.env.BONFIRE_DEBUG === '1') {
+              console.error('[bonfire] streamText error:', error);
+            }
+          },
+        }),
+      {
+        signal: options?.signal,
+        onRetry: (attempt, delay) => {
+          if (process.env.BONFIRE_DEBUG === '1') {
+            console.error(`[bonfire] retrying provider call #${attempt} in ${delay}ms`);
+          }
+        },
       },
-    });
+    );
 
     for await (const part of result.fullStream) {
       if (options?.signal?.aborted) break;
