@@ -14,15 +14,20 @@ import {
 let cwd: string;
 let home: string;
 const realHome = process.env.HOME;
+const realAppData = process.env.APPDATA;
 
 beforeEach(() => {
   cwd = mkdtempSync(join(tmpdir(), 'bonfire-mem-repo-'));
   home = mkdtempSync(join(tmpdir(), 'bonfire-mem-home-'));
   process.env.HOME = home;
+  // On Windows the config dir comes from %APPDATA%, not HOME.
+  process.env.APPDATA = home;
 });
 
 afterEach(() => {
   process.env.HOME = realHome;
+  if (realAppData === undefined) delete process.env.APPDATA;
+  else process.env.APPDATA = realAppData;
   rmSync(cwd, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
 });
