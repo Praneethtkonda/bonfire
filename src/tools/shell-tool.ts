@@ -1,4 +1,5 @@
 import { tool } from 'ai';
+import { headTail, toolOutputMaxChars } from './truncate.js';
 import { z } from 'zod';
 import { execa } from 'execa';
 import { requestApproval } from './approval.js';
@@ -9,6 +10,20 @@ import {
   isShellPreApproved,
   rememberShellApproval,
 } from './shell-policy.js';
+
+/**
+ * Room for stdout and stderr inside the window-relative tool output cap, so
+ * the result isn't cut a second time. Both keep their tail, where build and
+ * test errors are.
+ */
+export function shellOutputLimits(limit: number = toolOutputMaxChars()): {
+  stdout: number;
+  stderr: number;
+} {
+  const room = Math.max(1_000, limit - 200);
+  const stderr = Math.floor(room / 4);
+  return { stdout: room - stderr, stderr };
+}
 
 export const shellTool = tool({
   description:
@@ -40,6 +55,7 @@ export const shellTool = tool({
       }
     }
 
+    const max = shellOutputLimits();
     try {
       const { stdout, stderr, exitCode } = await execa(command, {
         shell: true,
@@ -49,8 +65,8 @@ export const shellTool = tool({
       });
       return {
         exitCode,
-        stdout: stdout.slice(0, 8000),
-        stderr: stderr.slice(0, 2000),
+        stdout: headTail(stdout, max.stdout),
+        stderr: headTail(stderr, max.stderr),
       };
     } catch (e: unknown) {
       return { error: e instanceof Error ? e.message : String(e) };

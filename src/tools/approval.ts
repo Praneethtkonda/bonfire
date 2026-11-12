@@ -14,7 +14,13 @@ export function setApprovalHandler(fn: ApprovalHandler | null) {
   handler = fn;
 }
 
+// Tool calls in one step run in parallel, but only one prompt can be on
+// screen, so prompts queue behind each other.
+let queue: Promise<unknown> = Promise.resolve();
+
 export async function requestApproval(req: ApprovalRequest): Promise<ApprovalDecision> {
-  if (!handler) return 'yes';
-  return handler(req);
+  const ask = async (): Promise<ApprovalDecision> => (handler ? handler(req) : 'yes');
+  const next = queue.then(ask, ask);
+  queue = next.catch(() => undefined);
+  return next;
 }

@@ -1,13 +1,13 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { CommandSuggestion } from '../commands/index.js';
-import { theme, glyphs } from '../theme.js';
+import { theme } from '../theme.js';
 
 const MAX_VISIBLE = 8;
 
 /**
- * Slash-command palette shown above the input. Borderless and dim so it reads
- * as an overlay on the prompt rather than another panel competing with it.
+ * Slash-command palette under the input: the selected command in the accent
+ * colour, the rest muted. ↑/↓ move, tab completes, enter runs.
  */
 export function CommandSuggestions({
   items,
@@ -27,32 +27,27 @@ export function CommandSuggestions({
   const triggerWidth = Math.max(...items.map((s) => s.trigger.length));
 
   return (
-    <Box flexDirection="column" paddingX={1} marginBottom={1}>
+    <Box flexDirection="column" paddingX={2}>
       {items.slice(startIdx, endIdx).map((s, idx) => {
         const isSel = startIdx + idx === selected;
         return (
-          <Text key={s.trigger}>
-            <Text color={isSel ? theme.accent : theme.muted}>
-              {isSel ? `${glyphs.selected} ` : '  '}
-            </Text>
-            <Text color={isSel ? theme.accent : theme.body} bold={isSel}>
-              {s.trigger.padEnd(triggerWidth)}
-            </Text>
-            <Text color={theme.muted} dimColor>
-              {'  '}
+          <Box key={s.trigger}>
+            <Box width={triggerWidth + 3} flexShrink={0}>
+              <Text color={isSel ? theme.accent : theme.body} bold={isSel}>
+                {s.trigger}
+              </Text>
+            </Box>
+            <Text color={isSel ? theme.accent : theme.muted} wrap="truncate-end">
               {s.description}
             </Text>
-          </Text>
+          </Box>
         );
       })}
       {endIdx < items.length ? (
         <Text color={theme.muted} dimColor>
-          {'  '}… {items.length - endIdx} more
+          … {items.length - endIdx} more
         </Text>
       ) : null}
-      <Text color={theme.muted} dimColor>
-        {'  '}↑↓ navigate · tab complete · enter run
-      </Text>
     </Box>
   );
 }

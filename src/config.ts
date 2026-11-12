@@ -76,6 +76,7 @@ export const DEFAULT_CONFIG: NanoConfig = {
     maxTokens: 8192,
     compactThreshold: 0.75,
     autoCompact: true,
+    summarize: true,
   },
   ui: {
     theme: DEFAULT_THEME,
@@ -169,6 +170,11 @@ export interface ContextConfig {
   compactThreshold?: number;
   /** Set false to disable automatic compaction entirely. Default: true. */
   autoCompact?: boolean;
+  /**
+   * Have the model summarise dropped turns during compaction. When false,
+   * dropped turns are replaced by the first request only. Default: true.
+   */
+  summarize?: boolean;
 }
 
 export interface UiConfig {
@@ -191,6 +197,8 @@ export interface NanoConfig {
   security?: SecurityConfig;
   codemap?: CodemapConfig;
   context?: ContextConfig;
+  /** Set false to turn off agentic memory (the memory tool and notes in the prompt). Default: true. */
+  memory?: boolean;
   ui?: UiConfig;
 }
 

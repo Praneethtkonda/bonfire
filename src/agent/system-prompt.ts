@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { getAllowedDirs } from '../tools/index.js';
 import { loadConfig } from '../config.js';
 import { loadSkills, type Skill, getGlobalBonfireDir } from '../skills/index.js';
+import { memoryBlock, setMemoryEnabled } from '../memory/index.js';
 
 const BASE_PROMPT = `You are bonfire, a terminal coding assistant.
 
@@ -63,6 +64,27 @@ async function gatherOverrides(cwd: string): Promise<string[]> {
   return overrides;
 }
 
+/**
+ * Repository instruction files, read from the working directory in this
+ * order. BONFIRE.local.md is for personal notes and is meant to be gitignored.
+ */
+export const REPO_INSTRUCTION_FILES = ['BONFIRE.md', 'AGENTS.md', 'CLAUDE.md', 'BONFIRE.local.md'];
+export const REPO_INSTRUCTIONS_MAX_CHARS = 20_000;
+
+export async function repoInstructionsBlock(cwd: string): Promise<string> {
+  const parts: string[] = [];
+  for (const name of REPO_INSTRUCTION_FILES) {
+    const text = await readIfExists(resolve(cwd, name));
+    if (text) parts.push(`### ${name}\n${text}`);
+  }
+  if (parts.length === 0) return '';
+  let body = parts.join('\n\n');
+  if (body.length > REPO_INSTRUCTIONS_MAX_CHARS) {
+    body = `${body.slice(0, REPO_INSTRUCTIONS_MAX_CHARS)}\n[repository instructions truncated]`;
+  }
+  return `\n\n## Repository instructions\n${body}`;
+}
+
 function dirsBlock(): string {
   const dirs = getAllowedDirs();
   if (dirs.length <= 1) return '';
@@ -84,11 +106,16 @@ function skillsBlock(skills: Skill[]): string {
 export async function buildSystemPrompt(cwd: string = process.cwd()): Promise<string> {
   const cfg = await loadConfig();
   const mode = cfg.systemPromptMode ?? 'append';
+  setMemoryEnabled(cfg.memory !== false);
   const base = BASE_PROMPT.replace('{{PLATFORM_HINT}}', platformHint());
   const overrides = await gatherOverrides(cwd);
   const skills = await loadSkills(cwd);
 
-  const tail = dirsBlock() + skillsBlock(skills);
+  const tail =
+    dirsBlock() +
+    skillsBlock(skills) +
+    (await repoInstructionsBlock(cwd)) +
+    (cfg.memory === false ? '' : await memoryBlock(cwd));
 
   if (mode === 'replace' && overrides.length > 0) {
     return overrides.join('\n\n') + tail;

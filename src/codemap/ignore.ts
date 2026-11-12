@@ -7,7 +7,7 @@ import ignore, { type Ignore } from 'ignore';
  * dirs, the repo's own state. Patterns are written as gitignore lines so they
  * match at any depth (e.g. nested `node_modules/`).
  */
-const IGNORED_DIRS = [
+export const IGNORED_DIRS = [
   'node_modules',
   '.git',
   '.hg',
@@ -34,7 +34,7 @@ const IGNORED_DIRS = [
   '.bonfire',
 ] as const;
 
-const IGNORED_FILE_BASENAMES = [
+export const IGNORED_FILE_BASENAMES = [
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
@@ -47,7 +47,7 @@ const IGNORED_FILE_BASENAMES = [
   '.DS_Store',
 ] as const;
 
-const BINARY_EXTENSIONS = new Set([
+export const BINARY_EXTENSIONS = new Set([
   // images
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.tiff', '.svg',
   // av

@@ -17,6 +17,8 @@ export interface CompactionInfo {
   trimmedToolOutputs: number;
   tokensBefore: number;
   tokensAfter: number;
+  /** True when the model summarised the dropped turns. */
+  summarised?: boolean;
 }
 
 export interface AgentEvent {
@@ -31,6 +33,7 @@ export interface AgentEvent {
     | 'usage'
     | 'context'
     | 'compaction'
+    | 'notice'
     | 'abort'
     | 'done'
     | 'error';

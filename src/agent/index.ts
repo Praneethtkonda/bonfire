@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, type ModelMessage } from 'ai';
+import { streamText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
 import { tools as builtinTools, describeBuiltins, type ToolDescriptor } from '../tools/index.js';
 import { loadMcpServers, type LoadedMcp } from '../mcp/index.js';
 import { getProvider, describeProvider, resetProvider } from './provider.js';
@@ -7,12 +7,19 @@ import { buildSystemPrompt } from './system-prompt.js';
 import { formatProviderError } from './error-format.js';
 import {
   autoCompact,
+  clearForStep,
   estimateTokens,
   estimateHistoryTokens,
   getContextSettings,
+  promptOverhead,
+  recordActualTokens,
   type ContextStatus,
 } from './context.js';
 import { withRetry } from './retry.js';
+import { isMemoryEnabled } from '../memory/index.js';
+import { modelSummariser, withSummary } from './summary.js';
+import { isLooping, LOOP_NOTICE } from './loop-guard.js';
+import { setToolOutputBudget, withOutputCap } from '../tools/truncate.js';
 
 export type { AgentEvent, TokenUsage };
 export type { ToolDescriptor };
@@ -25,6 +32,14 @@ export {
   estimateTokens,
   getContextSettings,
 } from './context.js';
+export { modelSummariser, withSummary } from './summary.js';
+export { getProvider } from './provider.js';
+
+const MAX_STEPS = 100;
+/** Tool calls in one step that may run at once. Approval prompts still queue. */
+const TOOL_CALL_CONCURRENCY = 4;
+/** Retries when the stream fails after it has started. */
+const STREAM_RETRIES = 2;
 
 let mcpState: LoadedMcp | null = null;
 
@@ -40,7 +55,9 @@ export async function shutdownMcp(): Promise<void> {
 /** Tools currently exposed to the model (built-in + MCP) with descriptions. */
 export function listTools(): ToolDescriptor[] {
   const disableBuiltins = process.env.BONFIRE_DISABLE_BUILTINS === '1';
-  const builtins = disableBuiltins ? [] : describeBuiltins();
+  const builtins = disableBuiltins
+    ? []
+    : describeBuiltins().filter((t) => t.name !== 'memory' || isMemoryEnabled());
   const mcp: ToolDescriptor[] = Object.keys(mcpState?.tools ?? {}).map((name) => ({
     name,
     description: '',
@@ -61,10 +78,16 @@ export async function* runAgent(
     const system = await buildSystemPrompt();
     const systemTokens = estimateTokens(system);
     const settings = await getContextSettings();
+    setToolOutputBudget(settings.maxTokens);
 
     // Compact *before* appending the new input so the user's own message is
-    // never the thing that gets dropped.
-    const compaction = autoCompact(history, settings, systemTokens);
+    // never the thing that gets dropped. Dropped turns are summarised by the
+    // model, always keeping the first request verbatim.
+    const compaction = await withSummary(
+      autoCompact(history, settings, systemTokens),
+      settings.summarize !== false ? modelSummariser(provider.model, settings.maxTokens) : null,
+      options?.signal,
+    );
     if (compaction.changed) {
       yield {
         type: 'compaction',
@@ -73,6 +96,7 @@ export async function* runAgent(
           trimmedToolOutputs: compaction.trimmedToolOutputs,
           tokensBefore: compaction.tokensBefore,
           tokensAfter: compaction.tokensAfter,
+          summarised: compaction.summarised,
         },
       };
     }
@@ -82,23 +106,30 @@ export async function* runAgent(
       { role: 'user', content: userInput },
     ];
 
+    const used = estimateHistoryTokens(messages) + systemTokens + promptOverhead();
     yield {
       type: 'context',
       context: {
-        used: estimateHistoryTokens(messages) + systemTokens,
+        used,
         max: settings.maxTokens,
-        ratio:
-          settings.maxTokens > 0
-            ? (estimateHistoryTokens(messages) + systemTokens) / settings.maxTokens
-            : 0,
+        ratio: settings.maxTokens > 0 ? used / settings.maxTokens : 0,
       },
     };
 
     const disableBuiltins = process.env.BONFIRE_DISABLE_BUILTINS === '1';
-    const mergedTools = {
-      ...(disableBuiltins ? {} : builtinTools),
-      ...(mcpState?.tools ?? {}),
-    };
+    const mergedTools: Record<string, unknown> = {};
+    if (!disableBuiltins) {
+      for (const [name, t] of Object.entries(builtinTools)) {
+        if (name === 'memory' && !isMemoryEnabled()) continue;
+        mergedTools[name] = withOutputCap(t, false);
+      }
+    }
+    for (const [name, t] of Object.entries(mcpState?.tools ?? {})) {
+      mergedTools[name] = withOutputCap(t, true);
+    }
+
+    let looped = false;
+    let lastEstimate = 0;
 
     // Only the initial connection is retried. Once tokens are streaming a
     // retry would replay text the user has already seen.
@@ -108,10 +139,21 @@ export async function* runAgent(
           model: provider.model,
           system,
           messages,
-          tools: mergedTools,
-          stopWhen: stepCountIs(100),
+          tools: mergedTools as ToolSet,
+          stopWhen: [stepCountIs(MAX_STEPS), ({ steps }) => (looped = looped || isLooping(steps))],
           temperature: 0.2,
+          streamRetries: STREAM_RETRIES,
+          toolCallConcurrency: TOOL_CALL_CONCURRENCY,
           abortSignal: options?.signal,
+          // Clear old tool output between steps once the window fills up.
+          prepareStep: ({ messages: stepMessages }) => {
+            const cleared = clearForStep(stepMessages, settings, systemTokens);
+            lastEstimate = estimateHistoryTokens(cleared ?? stepMessages) + systemTokens;
+            return cleared ? { messages: cleared } : undefined;
+          },
+          onStepFinish: ({ usage }) => {
+            if (usage?.inputTokens) recordActualTokens(lastEstimate, usage.inputTokens);
+          },
           // Suppress the AI SDK's default console.error of the full stack. The
           // user-facing message comes from the `error` event on `fullStream`,
           // which we route through formatProviderError below. Keep the raw error
@@ -141,6 +183,8 @@ export async function* runAgent(
         yield ev;
       }
     }
+
+    if (looped) yield { type: 'notice', text: LOOP_NOTICE };
 
     // If the stream already produced an error event, awaiting `result.response`
     // would reject with NoOutputGeneratedError and we'd surface a second,

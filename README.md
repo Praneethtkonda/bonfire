@@ -293,6 +293,25 @@ Every preset uses only the 16 ANSI colour names, never hex, so bonfire inherits 
 | `REMOTE_API_KEY` | — | Remote API key |
 | `BONFIRE_DEBUG` | — | `1` to log every HTTP request (auth headers redacted) |
 | `BONFIRE_DISABLE_BUILTINS` | — | `1` to run with only MCP tools |
+| `BONFIRE_RG` | `rg` on `PATH` | Path to a ripgrep binary used by `search` |
+| `BONFIRE_NO_RG` | — | `1` to always use the built-in JS search |
+
+---
+
+## Memory
+
+bonfire keeps short notes across sessions and adds them to the system prompt:
+
+- **Repo memory** in `<repo>/.bonfire/memory/` — project facts, conventions, commands.
+- **User memory** in `memory/` next to your bonfire config file — personal preferences for every repo.
+
+The model saves, reads and forgets notes with the `memory` tool (shown as Remember / Recall / Forget). You can add notes yourself with `/remember <note>` (`--user` for user memory) or by typing `# <note>`, and list them with `/memory`. Set `"memory": false` in the config to turn it off.
+
+bonfire also reads project instructions from `BONFIRE.md`, `AGENTS.md`, `CLAUDE.md` and `BONFIRE.local.md` in the repo root.
+
+### Long conversations
+
+When the context fills up, bonfire first clears old tool outputs, then replaces older turns with a model-written summary that pins your original request (`context.summarize`, default `true`; set it to `false` to drop old turns instead). Tool output is capped relative to the model's context window (15%, at least 4,000 characters) keeping the head and tail, the prompt-size estimate is corrected from real token usage, tool calls run in parallel, and a loop guard stops the agent if it repeats the same tool call.
 
 ---
 
@@ -372,7 +391,10 @@ Type these inside the bonfire TUI:
 | `/sessions save` | Force-save the active session |
 | `/sessions delete <id>` | Remove a session — full ID or any unique prefix |
 | `/context` | Show context-window usage for the live conversation |
-| `/compact` | Reclaim context now — trims old tool output, then drops old turns |
+| `/compact` | Reclaim context now — trims old tool output, then summarises old turns (keeping your original request) |
+| `/memory` | Show repo and user memory notes |
+| `/remember [--user] <note>` | Save a note to repo memory (or user memory with `--user`) |
+| `# <note>` | Quick-save a note to repo memory |
 | `/tools` | List every tool the model can call, built-in and MCP |
 | `/theme` | List colour themes |
 | `/theme <name>` | Switch theme — applies instantly, saved to your config |
@@ -382,7 +404,7 @@ Type these inside the bonfire TUI:
 | `/reconfigure` | Interactive reconfiguration TUI |
 | `/exit`, `/quit`, `esc` | Leave |
 
-During an approval prompt: `y` = yes, `n` = no, `a` = always for the rest of the session. `a` works for shell commands, file edits and MCP tool calls alike; `/sessions new` clears everything you've remembered.
+During an approval prompt: pick an option with ↑/↓ + Enter or its number, or press `y` = yes, `n` = no, `a` = always for the rest of the session. `a` works for shell commands, file edits and MCP tool calls alike; `/sessions new` clears everything you've remembered.
 
 Tip: type `/` at any time to see a dropdown of every command — Tab completes, ↑/↓ moves the selection, Enter executes selected command.
 

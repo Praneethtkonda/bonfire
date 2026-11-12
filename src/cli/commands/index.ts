@@ -11,6 +11,7 @@ import { compactCommand, contextCommand } from './context.js';
 import { toolsCommand } from './tools.js';
 import { themeCommand } from './theme.js';
 import { reconfigureCommand } from './reconfigure.js';
+import { hashMemoryCommand, memoryCommand, rememberCommand } from './memory.js';
 import { makeHelpCommand } from './help.js';
 
 export type { CommandContext, SlashCommand };
@@ -30,6 +31,9 @@ const baseCommands: SlashCommand[] = [
   toolsCommand,
   themeCommand,
   reconfigureCommand,
+  memoryCommand,
+  rememberCommand,
+  hashMemoryCommand,
 ];
 
 export const commands: SlashCommand[] = [

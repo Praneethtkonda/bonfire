@@ -2,12 +2,14 @@
  * Shared visual language for the TUI.
  *
  * A calm, mostly-monochrome transcript where colour is reserved for meaning
- * (tool activity, diffs, errors), a single rounded input box anchored at the
- * bottom, and a dim status line beneath it.
+ * (tool status, diffs, errors), a single rounded input box anchored at the
+ * bottom, and a quiet hint line beneath it.
  *
- * Only the 16 ANSI names are used so the result inherits the user's terminal
- * palette instead of fighting it — a solarized or gruvbox terminal gets a
- * solarized or gruvbox bonfire for free.
+ * Foreground colours use the 16 ANSI names so the result inherits the user's
+ * terminal palette instead of fighting it — a solarized or gruvbox terminal
+ * gets a solarized or gruvbox bonfire for free. Diff row backgrounds are
+ * the exception: a tinted row needs a specific shade to stay readable, and
+ * chalk maps it down to the nearest colour on 256- or 16-colour terminals.
  *
  * `theme` is a live object: `setTheme` mutates it in place and notifies
  * subscribers, so every component that did `import { theme }` picks up the
@@ -29,6 +31,16 @@ export interface Theme {
   muted: string;
   /** Primary body text — undefined inherits the terminal foreground. */
   body: string | undefined;
+  /** The working spinner and its verb. */
+  spinner: string;
+  /** Inline `code` in assistant markdown. */
+  code: string;
+  /** Background of an added diff row; undefined leaves the row untinted. */
+  diffAddedBg: string | undefined;
+  /** Background of a removed diff row; undefined leaves the row untinted. */
+  diffRemovedBg: string | undefined;
+  /** Text on a tinted diff row; undefined inherits the terminal foreground. */
+  diffText: string | undefined;
 }
 
 export interface ThemePreset extends Theme {
@@ -51,6 +63,11 @@ export const THEMES: Record<string, ThemePreset> = {
     danger: 'red',
     muted: 'gray',
     body: undefined,
+    spinner: 'magenta',
+    code: 'cyan',
+    diffAddedBg: '#225c2b',
+    diffRemovedBg: '#7a2936',
+    diffText: 'white',
   },
   ember: {
     description: 'Magenta accent, yellow tools — warmer, higher contrast',
@@ -61,6 +78,11 @@ export const THEMES: Record<string, ThemePreset> = {
     danger: 'red',
     muted: 'gray',
     body: undefined,
+    spinner: 'yellow',
+    code: 'yellow',
+    diffAddedBg: '#225c2b',
+    diffRemovedBg: '#7a2936',
+    diffText: 'white',
   },
   forest: {
     description: 'Green accent, cyan tools — low-key and cool',
@@ -71,6 +93,26 @@ export const THEMES: Record<string, ThemePreset> = {
     danger: 'red',
     muted: 'gray',
     body: undefined,
+    spinner: 'green',
+    code: 'cyan',
+    diffAddedBg: '#225c2b',
+    diffRemovedBg: '#7a2936',
+    diffText: 'white',
+  },
+  light: {
+    description: 'For light terminal backgrounds — pale diff rows, darker accents',
+    accent: 'blue',
+    tool: 'blue',
+    success: 'green',
+    warn: 'yellow',
+    danger: 'red',
+    muted: 'gray',
+    body: undefined,
+    spinner: 'magenta',
+    code: 'magenta',
+    diffAddedBg: '#d7f5dd',
+    diffRemovedBg: '#fbdde1',
+    diffText: 'black',
   },
   mono: {
     description: 'Grayscale except errors — for busy or low-colour terminals',
@@ -81,6 +123,11 @@ export const THEMES: Record<string, ThemePreset> = {
     danger: 'red',
     muted: 'gray',
     body: undefined,
+    spinner: 'white',
+    code: 'white',
+    diffAddedBg: undefined,
+    diffRemovedBg: undefined,
+    diffText: undefined,
   },
 };
 
@@ -131,16 +178,25 @@ export function subscribeTheme(fn: () => void): () => void {
 }
 
 export const glyphs = {
-  prompt: '❯',
-  bullet: '●',
-  branch: '└',
-  selected: '▸',
-  spark: '✦',
+  /** The caret inside the input box and on echoed user turns. */
+  prompt: '>',
+  /** Marks the selected option in a menu. */
+  pointer: '❯',
+  /** Leads every assistant message and tool call. */
+  bullet: '⏺',
+  /** Hangs a tool result or a notice off the line above it. */
+  result: '⎿',
+  /** Working spinner frames, played forwards then backwards. */
+  spinner: ['·', '✢', '✳', '✶', '✻', '✽'],
+  spark: '✻',
+  pause: '⏸',
   check: '✓',
   cross: '✗',
-  warn: '!',
   ellipsis: '…',
 } as const;
+
+/** The bonfire brand gradient: red-orange flame to amber. */
+export const BRAND_GRADIENT = { from: '#ff4d00', to: '#ffb300' } as const;
 
 /** Render a proportional bar used by the context meter. */
 export function meter(ratio: number, width = 10): string {
@@ -161,6 +217,15 @@ export function compactNumber(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
   return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** Human duration for the spinner and turn summary: 7 → "7s", 75 → "1m 15s". */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 /** Shorten a path for the status line: /Users/me/src/app → ~/src/app. */

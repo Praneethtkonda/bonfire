@@ -4,6 +4,7 @@ import { navigateTool } from './navigate-tool.js';
 import { searchTool } from './search-tool.js';
 import { fetchUrlTool } from './fetch-tool.js';
 import { loadSkillTool } from '../skills/index.js';
+import { memoryTool } from './memory-tool.js';
 
 export type { ApprovalRequest, ApprovalDecision, ApprovalHandler } from './approval.js';
 export { setApprovalHandler } from './approval.js';
@@ -27,6 +28,7 @@ export const tools = {
   shell: shellTool,
   fetch_url: fetchUrlTool,
   load_skill: loadSkillTool,
+  memory: memoryTool,
 };
 
 export interface ToolDescriptor {
@@ -45,6 +47,7 @@ const BUILTIN_DESCRIPTIONS: Record<keyof typeof tools, string> = {
   shell: 'Run a shell command (approval gated, deny-list applied)',
   fetch_url: 'Fetch an http(s) URL and return the response body (HTML stripped to text)',
   load_skill: 'Load detailed instructions for a named skill',
+  memory: 'Save, forget or read notes kept across sessions (repo or user)',
 };
 
 export function describeBuiltins(): ToolDescriptor[] {

@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { isIgnoredDir, isIgnoredFile, loadIgnoreRules } from '../codemap/ignore.js';
 import { safePath, getCwd } from './safe-path.js';
+import { findRipgrep, searchWithRipgrep } from './ripgrep.js';
 
 const MAX_MATCHES = 200;
 const MAX_FILES_SCANNED = 20_000;
@@ -86,6 +87,12 @@ export async function searchRepo(input: {
       truncated: false,
       error: `invalid regex: ${e instanceof Error ? e.message : String(e)}`,
     };
+  }
+
+  const rg = findRipgrep();
+  if (rg) {
+    const fast = await searchWithRipgrep(rg, root, input, cap, MAX_LINE_CHARS);
+    if (fast) return fast;
   }
 
   const globRe = input.glob ? globToRegExp(input.glob) : null;

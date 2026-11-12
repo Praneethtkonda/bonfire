@@ -4,6 +4,9 @@ import {
   contextStatus,
   estimateTokens,
   getContextSettings,
+  getProvider,
+  modelSummariser,
+  withSummary,
 } from '../../agent/index.js';
 import { buildSystemPrompt } from '../../agent/system-prompt.js';
 
@@ -44,7 +47,7 @@ export const contextCommand: SlashCommand = {
 
 export const compactCommand: SlashCommand = {
   trigger: '/compact',
-  description: 'Reclaim context by trimming old tool output and dropping old turns',
+  description: 'Reclaim context by trimming old tool output and summarising old turns',
   match: (input) => input.trim() === '/compact',
   async run(ctx, input) {
     ctx.appendLines({ kind: 'user', text: input });
@@ -58,7 +61,12 @@ export const compactCommand: SlashCommand = {
     }
 
     const target = Math.max(1024, Math.floor(settings.maxTokens * 0.5) - systemTokens);
-    const result = compactHistory(history, { targetTokens: target });
+    const compacted = compactHistory(history, { targetTokens: target });
+    const summariser =
+      compacted.droppedMessages > 0 && settings.summarize !== false
+        ? modelSummariser((await getProvider()).model, settings.maxTokens)
+        : null;
+    const result = await withSummary(compacted, summariser);
 
     if (!result.changed) {
       ctx.appendLines({
@@ -70,7 +78,11 @@ export const compactCommand: SlashCommand = {
 
     ctx.setHistory(result.messages);
     const parts: string[] = [];
-    if (result.droppedMessages > 0) parts.push(`dropped ${result.droppedMessages} old messages`);
+    if (result.droppedMessages > 0) {
+      parts.push(
+        `${result.summarised ? 'summarised' : 'dropped'} ${result.droppedMessages} old messages`,
+      );
+    }
     if (result.trimmedToolOutputs > 0) {
       parts.push(`trimmed ${result.trimmedToolOutputs} tool outputs`);
     }
