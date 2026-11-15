@@ -13,7 +13,10 @@ import { useThinkingPhrase } from './hooks/useThinkingPhrase.js';
 import { useElapsed } from './hooks/useElapsed.js';
 import { useThemeVersion } from './hooks/useTheme.js';
 import { Banner } from './components/Banner.js';
-import { AssistantMessage, Transcript } from './components/Transcript.js';
+import { Transcript } from './components/Transcript.js';
+import { StreamingMessage } from './components/StreamingMessage.js';
+import { useRows } from './hooks/useRows.js';
+import { useColumns } from './hooks/useColumns.js';
 import { ModifiedFilesPanel } from './components/ModifiedFilesPanel.js';
 import { ApprovalPrompt, approvalOptions } from './components/ApprovalPrompt.js';
 import { InputBox } from './components/InputBox.js';
@@ -49,6 +52,8 @@ export interface AppProps {
 export function App({ firstRun = false }: AppProps) {
   const { exit } = useApp();
   const cwd = process.cwd();
+  const rows = useRows();
+  const columns = useColumns();
   const { pending, decide } = useApproval();
 
   const [input, setInput] = useState('');
@@ -283,6 +288,8 @@ export function App({ firstRun = false }: AppProps) {
       <Box flexDirection="column">
         <Transcript lines={stream.lines} />
 
+        <Box flexDirection="column" maxHeight={Math.max(1, rows - 1)} overflow="hidden">
+        <Box flexDirection="column" flexShrink={1} overflow="hidden">
         {/* Live region — everything below repaints as the turn progresses. */}
         {stream.runningTools.map((t) => (
           <RunningToolCall
@@ -297,7 +304,8 @@ export function App({ firstRun = false }: AppProps) {
           <RunningToolCall name={stream.activeTool.name} args={safeParse(stream.activeTool.args)} />
         ) : null}
 
-        {stream.active ? <AssistantMessage text={stream.active} /> : null}
+        {stream.active ? <StreamingMessage text={stream.active} columns={columns} rows={rows} /> : null}
+        </Box>
 
         {stream.busy && !pending ? (
           <Spinner
@@ -318,7 +326,7 @@ export function App({ firstRun = false }: AppProps) {
             onCancel={handleReconfigureCancel}
           />
         ) : (
-          <Box flexDirection="column">
+          <Box flexDirection="column" flexShrink={0}>
             <ModifiedFilesPanel tick={stream.tick} />
             <InputBox
               value={input}
@@ -341,6 +349,7 @@ export function App({ firstRun = false }: AppProps) {
             )}
           </Box>
         )}
+        </Box>
       </Box>
     </ErrorBoundary>
   );

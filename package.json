@@ -50,6 +50,7 @@
     "access": "public"
   },
   "dependencies": {
+    "wrap-ansi": "^10.0.0",
     "@ai-sdk/mcp": "^2.0.97",
     "@ai-sdk/openai-compatible": "^3.0.90",
     "ai": "^7.0.170",
