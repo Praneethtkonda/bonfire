@@ -1,8 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
-import { AssistantMessage } from './Transcript.js';
-import { glyphs, theme } from '../theme.js';
+import { AssistantMessage } from './Transcript';
+import { glyphs, theme } from '../theme';
 
 export function streamingPreview(text: string, columns: number, rows: number) {
   const width = Math.max(1, columns - 2);

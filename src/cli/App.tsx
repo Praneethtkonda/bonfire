@@ -1,40 +1,40 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, useApp, useInput } from 'ink';
-import { getContextSettings } from '../agent/context.js';
-import { resetProvider, describeProvider } from '../agent/index.js';
-import type { Session } from '../session/index.js';
-import type { ApprovalDecision } from '../tools/index.js';
-import type { CodemapProgress } from './types.js';
-import { runSlashCommand, suggestCommands } from './commands/index.js';
-import { useApproval } from './hooks/useApproval.js';
-import { useProvider } from './hooks/useProvider.js';
-import { useAgentStream } from './hooks/useAgentStream.js';
-import { useThinkingPhrase } from './hooks/useThinkingPhrase.js';
-import { useElapsed } from './hooks/useElapsed.js';
-import { useThemeVersion } from './hooks/useTheme.js';
-import { Banner } from './components/Banner.js';
-import { Transcript } from './components/Transcript.js';
-import { StreamingMessage } from './components/StreamingMessage.js';
-import { useRows } from './hooks/useRows.js';
-import { useColumns } from './hooks/useColumns.js';
-import { ModifiedFilesPanel } from './components/ModifiedFilesPanel.js';
-import { ApprovalPrompt, approvalOptions } from './components/ApprovalPrompt.js';
-import { InputBox } from './components/InputBox.js';
-import { Footer, Shortcuts } from './components/Footer.js';
-import { Spinner } from './components/Spinner.js';
-import { CommandSuggestions } from './components/CommandSuggestions.js';
-import { ReconfigurePrompt } from './components/ReconfigurePrompt.js';
-import { ErrorBoundary } from './components/ErrorBoundary.js';
-import { RunningToolCall } from './components/ToolLine.js';
-import type { KeyMeta } from './components/MultilineInput.js';
-import { stashDiff } from './diff-stash.js';
+import { getContextSettings } from '../agent/context';
+import { resetProvider, describeProvider } from '../agent/index';
+import type { Session } from '../session/index';
+import type { ApprovalDecision } from '../tools/index';
+import type { CodemapProgress } from './types';
+import { runSlashCommand, suggestCommands } from './commands/index';
+import { useApproval } from './hooks/useApproval';
+import { useProvider } from './hooks/useProvider';
+import { useAgentStream } from './hooks/useAgentStream';
+import { useThinkingPhrase } from './hooks/useThinkingPhrase';
+import { useElapsed } from './hooks/useElapsed';
+import { useThemeVersion } from './hooks/useTheme';
+import { Banner } from './components/Banner';
+import { Transcript } from './components/Transcript';
+import { StreamingMessage } from './components/StreamingMessage';
+import { useRows } from './hooks/useRows';
+import { useColumns } from './hooks/useColumns';
+import { ModifiedFilesPanel } from './components/ModifiedFilesPanel';
+import { ApprovalPrompt, approvalOptions } from './components/ApprovalPrompt';
+import { InputBox } from './components/InputBox';
+import { Footer, Shortcuts } from './components/Footer';
+import { Spinner } from './components/Spinner';
+import { CommandSuggestions } from './components/CommandSuggestions';
+import { ReconfigurePrompt } from './components/ReconfigurePrompt';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { RunningToolCall } from './components/ToolLine';
+import type { KeyMeta } from './components/MultilineInput';
+import { stashDiff } from './diff-stash';
 import {
   loadConfig,
   saveConfig,
   clearConfigCache,
   DEFAULT_CONFIG,
   type NanoConfig,
-} from '../config.js';
+} from '../config';
 
 const PLACEHOLDERS = [
   'Try "fix the failing test"',
