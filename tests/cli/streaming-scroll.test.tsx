@@ -2,11 +2,11 @@ import React from 'react';
 import { render, Box, Text } from 'ink';
 import wrapAnsi from 'wrap-ansi';
 import { describe, expect, it, vi } from 'vitest';
-import { streamingPreview, StreamingMessage } from '../../src/cli/components/StreamingMessage';
-import { Transcript } from '../../src/cli/components/Transcript';
-import { useRows } from '../../src/cli/hooks/useRows';
-import { useColumns } from '../../src/cli/hooks/useColumns';
-import type { Line } from '../../src/cli/types';
+import { streamingPreview, StreamingMessage } from '../../src/cli/components/StreamingMessage.js';
+import { Transcript } from '../../src/cli/components/Transcript.js';
+import { useRows } from '../../src/cli/hooks/useRows.js';
+import { useColumns } from '../../src/cli/hooks/useColumns.js';
+import type { Line } from '../../src/cli/types.js';
 
 describe('streaming preview', () => {
   it('shows the newest lines without modifying the complete reply', () => {

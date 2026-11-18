@@ -1,10 +1,10 @@
 import React, { useCallback, useState } from 'react';
 import type { ModelMessage } from 'ai';
-import { runAgent, type TokenUsage, type ContextStatus } from '../../agent/index';
-import { formatProviderError } from '../../agent/error-format';
-import { createSession, saveSession, type Session } from '../../session/index';
-import type { Line, UsageTotals } from '../types';
-import { takeDiff } from '../diff-stash';
+import { runAgent, type TokenUsage, type ContextStatus } from '../../agent/index.js';
+import { formatProviderError } from '../../agent/error-format.js';
+import { createSession, saveSession, type Session } from '../../session/index.js';
+import type { Line, UsageTotals } from '../types.js';
+import { takeDiff } from '../diff-stash.js';
 
 interface ActiveTool {
   name: string;
