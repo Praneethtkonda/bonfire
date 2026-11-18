@@ -252,6 +252,7 @@ export function useAgentStream(args: UseAgentStreamArgs): UseAgentStreamResult {
           }
         }
       } catch (e: unknown) {
+        flushText();
         if (!aborted) {
           appendLines({ kind: 'error', text: formatProviderError(e) });
         }

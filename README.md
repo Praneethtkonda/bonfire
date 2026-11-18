@@ -158,6 +158,14 @@ bonfire
 
 Or configure manually in your config file (see below).
 
+### Scrolling while a reply streams
+
+Long replies use a bounded live preview of the latest lines to avoid clearing
+the terminal's scrollback on every update. Scroll normally using your terminal.
+The complete Markdown-formatted reply is written to scrollback when it finishes
+(or reaches a tool boundary or is canceled); no generated text is discarded.
+See [the terminal scrolling spec](docs/terminal-streaming-scroll-spec.md).
+
 ### Try these first
 
 - `list the files in src` — feel for navigation
